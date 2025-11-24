@@ -1,5 +1,6 @@
 
 export enum GameStatus {
+    TITLE,
     MENU,
     PLAYING,
     PAUSED,
@@ -83,4 +84,9 @@ export interface KeyMapping {
     4: string[];
     5: string[];
     7: string[];
+}
+
+export interface AudioSettings {
+    masterVolume: number;
+    sfxVolume: number;
 }

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { GoogleGenAI } from "@google/genai";
 import { 
   Note as NoteType, 
   ScoreRating, 
@@ -7,7 +8,8 @@ import {
   HitEffectData,
   LaneConfig,
   SongMetadata,
-  KeyMapping
+  KeyMapping,
+  AudioSettings
 } from './types';
 import { 
   LANE_CONFIGS_4,
@@ -30,7 +32,7 @@ const audioCtxRef = { current: null as AudioContext | null };
 
 const App: React.FC = () => {
   // Game State
-  const [status, setStatus] = useState<GameStatus>(GameStatus.MENU);
+  const [status, setStatus] = useState<GameStatus>(GameStatus.TITLE);
   const [score, setScore] = useState<number>(0);
   const [combo, setCombo] = useState<number>(0);
   const [maxCombo, setMaxCombo] = useState<number>(0);
@@ -51,15 +53,20 @@ const App: React.FC = () => {
   // Visual Effects State
   const [hitEffects, setHitEffects] = useState<HitEffectData[]>([]);
 
-  // Local Video State
+  // Local Media State
   const [localVideoSrc, setLocalVideoSrc] = useState<string>('');
   const [localFileName, setLocalFileName] = useState<string>('');
+  const [mediaType, setMediaType] = useState<'audio' | 'video'>('video');
   
+  // Sound Profile State (Dynamic Drum Sounds)
+  const [soundProfile, setSoundProfile] = useState<'electronic' | 'rock' | 'chiptune'>('electronic');
+
   // Folder / Song Selection State
   const [songList, setSongList] = useState<SongMetadata[]>([]);
   const [isLoadingFolder, setIsLoadingFolder] = useState<boolean>(false);
   
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [isGeneratingTheme, setIsGeneratingTheme] = useState<boolean>(false);
   const [analyzedNotes, setAnalyzedNotes] = useState<NoteType[] | null>(null);
 
   const [level, setLevel] = useState<number>(5); // Level 1-10
@@ -69,6 +76,19 @@ const App: React.FC = () => {
   const [keyMode, setKeyMode] = useState<4 | 5 | 7>(7);
   const [keyMappings, setKeyMappings] = useState<KeyMapping>(DEFAULT_KEY_MAPPINGS);
   const [showKeyConfig, setShowKeyConfig] = useState<boolean>(false);
+
+  // Audio Settings
+  const [audioSettings, setAudioSettings] = useState<AudioSettings>({ masterVolume: 0.5, sfxVolume: 1.0 });
+  // Ref to hold audio settings for access within game loop/closures without dependency issues
+  const audioSettingsRef = useRef<AudioSettings>(audioSettings);
+
+  // Update ref and media volume when state changes
+  useEffect(() => {
+      audioSettingsRef.current = audioSettings;
+      if (mediaRef.current) {
+          mediaRef.current.volume = audioSettings.masterVolume;
+      }
+  }, [audioSettings]);
 
   // Load Key Mappings from LocalStorage
   useEffect(() => {
@@ -81,6 +101,30 @@ const App: React.FC = () => {
           }
       }
   }, []);
+
+  // Attempt to load demo track on menu entry
+  useEffect(() => {
+    if (status === GameStatus.MENU && songList.length === 0) {
+        fetch('demo.mp3')
+            .then(res => {
+                if (res.ok) return res.blob();
+                throw new Error('No demo track');
+            })
+            .then(blob => {
+                const file = new File([blob], 'demo.mp3', { type: 'audio/mpeg' });
+                setSongList([{
+                    id: 'demo',
+                    file: file,
+                    name: 'DEMO TRACK',
+                    thumbnailUrl: null,
+                    type: 'audio'
+                }]);
+            })
+            .catch(() => {
+                // Silent fail if demo.mp3 is not present
+            });
+    }
+  }, [status, songList.length]);
 
   const saveKeyMappings = (newMappings: KeyMapping) => {
       setKeyMappings(newMappings);
@@ -110,11 +154,12 @@ const App: React.FC = () => {
   const totalPauseDurationRef = useRef<number>(0);
   
   // Ref to track status inside callbacks/closures
-  const statusRef = useRef<GameStatus>(GameStatus.MENU);
+  const statusRef = useRef<GameStatus>(GameStatus.TITLE);
   
   const notesRef = useRef<NoteType[]>([]);
   const activeKeysRef = useRef<boolean[]>(new Array(7).fill(false)); // Max 7
-  const videoRef = useRef<HTMLVideoElement>(null); // Ref for local video
+  const mediaRef = useRef<HTMLMediaElement>(null); // Ref for audio/video playback
+  const bgVideoRef = useRef<HTMLVideoElement>(null); // Ref for background video loop
   const bgRef = useRef<HTMLDivElement>(null); // Ref for background pulse
   const progressBarRef = useRef<HTMLDivElement>(null); // Ref for progress bar
   
@@ -159,6 +204,11 @@ const App: React.FC = () => {
     return noiseBufferRef.current;
   };
 
+  // Helper to calculate volume
+  const getVol = (baseVol: number) => {
+      return baseVol * audioSettingsRef.current.masterVolume * audioSettingsRef.current.sfxVolume;
+  };
+
   const playUiSound = (type: 'hover' | 'select') => {
       if (!audioCtxRef.current) return; // Only play if context is already initialized
       const ctx = audioCtxRef.current;
@@ -169,12 +219,12 @@ const App: React.FC = () => {
       if (type === 'hover') {
           osc.frequency.setValueAtTime(400, t);
           osc.frequency.exponentialRampToValueAtTime(200, t + 0.05);
-          gain.gain.setValueAtTime(0.05, t);
+          gain.gain.setValueAtTime(getVol(0.05), t);
           osc.type = 'sine';
       } else {
           osc.frequency.setValueAtTime(800, t);
           osc.frequency.exponentialRampToValueAtTime(400, t + 0.1);
-          gain.gain.setValueAtTime(0.1, t);
+          gain.gain.setValueAtTime(getVol(0.1), t);
           osc.type = 'square';
       }
       
@@ -197,6 +247,76 @@ const App: React.FC = () => {
       }
   };
 
+  const generateAiTheme = async () => {
+    try {
+        // Veo requires user-selected API key
+        // @ts-ignore
+        if (window.aistudio && !await window.aistudio.hasSelectedApiKey()) {
+            // @ts-ignore
+            await window.aistudio.openSelectKey();
+        }
+
+        setIsGeneratingTheme(true);
+        initAudio(); // Ensure context is ready
+
+        // We create a fresh instance after key selection
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+        const promptText = "Upbeat catchy game intro music, instrumental only, no vocals. Bright electronic synths, rhythmic percussion, energetic but not overwhelming. Designed for a music-themed game. Memorable melody, looping seamlessly, fun and modern arcade vibes. Clear structure, short and repeating hook. No voices, no singing, no chants.";
+        const styles = "Styles: electronic, chiptune, synthwave, arcade, upbeat instrumental";
+        const finalPrompt = `${promptText}\n\n${styles}`;
+        
+        // Video prompt for the visual part of the generation
+        const videoPrompt = "Abstract neon rhythm game background, futuristic cyber city equalizer, pulsing geometric shapes, 4k, seamless loop, vibrant cyan and magenta colors.";
+
+        let operation = await ai.models.generateVideos({
+            model: 'veo-3.1-fast-generate-preview',
+            prompt: `${videoPrompt}. Audio style: ${finalPrompt}`,
+            config: {
+                numberOfVideos: 1,
+                resolution: '1080p',
+                aspectRatio: '16:9'
+            }
+        });
+
+        // Poll for completion
+        while (!operation.done) {
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            operation = await ai.operations.getVideosOperation({ operation: operation });
+        }
+
+        const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+        if (videoUri) {
+            // Fetch video blob
+            const response = await fetch(`${videoUri}&key=${process.env.API_KEY}`);
+            const blob = await response.blob();
+            const file = new File([blob], "AI_THEME_SONG.mp4", { type: "video/mp4" });
+
+            // Automatically load it
+            await handleFileSelect(file);
+            
+            // Add to list visually
+            const thumb = await generateVideoThumbnail(file);
+            setSongList([{
+                id: 'ai-theme',
+                file: file,
+                name: 'AI GENERATED THEME',
+                thumbnailUrl: thumb,
+                type: 'video'
+            }]);
+            
+            // Set sound profile for AI song to electronic/arcade to match the prompt
+            setSoundProfile('chiptune');
+        }
+
+    } catch (error) {
+        console.error("Failed to generate AI Theme:", error);
+        alert("Failed to generate theme. Please ensure you have selected a valid paid project/API key.");
+    } finally {
+        setIsGeneratingTheme(false);
+    }
+  };
+
   const handleFileSelect = async (file: File) => {
     if (file) {
       // Init audio context on user interaction
@@ -206,6 +326,18 @@ const App: React.FC = () => {
       const url = URL.createObjectURL(file);
       setLocalVideoSrc(url);
       setLocalFileName(file.name);
+      
+      // Determine Sound Profile based on file hash to ensure consistency
+      // This fulfills "sound changes according to each music file"
+      const hash = file.name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const profiles: ('electronic' | 'rock' | 'chiptune')[] = ['electronic', 'rock', 'chiptune'];
+      const selectedProfile = profiles[hash % profiles.length];
+      setSoundProfile(selectedProfile);
+
+      // Detect type
+      const isVideo = file.type.startsWith('video') || !!file.name.match(/\.(mp4|webm|ogg|mov|m4v)$/i);
+      setMediaType(isVideo ? 'video' : 'audio');
+
       setAnalyzedNotes(null); // Reset previous analysis
       
       try {
@@ -237,7 +369,7 @@ const App: React.FC = () => {
       setIsLoadingFolder(true);
       setSongList([]);
 
-      const validExtensions = ['.mp4', '.mp3', '.m4a', '.wav', '.ogg'];
+      const validExtensions = ['.mp4', '.mp3', '.m4a', '.wav', '.ogg', '.m4v', '.webm'];
       const loadedSongs: SongMetadata[] = [];
 
       // Process files
@@ -247,7 +379,7 @@ const App: React.FC = () => {
           const isValid = validExtensions.some(ext => lowerName.endsWith(ext));
           
           if (isValid) {
-              const isVideo = lowerName.endsWith('.mp4') || lowerName.endsWith('.m4v') || lowerName.endsWith('.webm');
+              const isVideo = lowerName.endsWith('.mp4') || lowerName.endsWith('.m4v') || lowerName.endsWith('.webm') || lowerName.endsWith('.mov');
               let thumb: string | null = null;
               
               if (isVideo) {
@@ -289,7 +421,7 @@ const App: React.FC = () => {
     const ctx = audioCtxRef.current;
     const t = ctx.currentTime;
     
-    // Adapt sound to key mode. 
+    // Determine note type (Kick, Snare, Hi-hat) based on lane
     let isKick = false;
     let isSnare = false;
 
@@ -298,63 +430,145 @@ const App: React.FC = () => {
     else if (keyMode === 4 && (laneIndex === 1 || laneIndex === 2)) isSnare = true; // Inner keys snare
     else if ((keyMode === 5 || keyMode === 7) && (laneIndex % 2 !== 0)) isSnare = true;
 
-    if (isKick) {
-      // KICK DRUM
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.frequency.setValueAtTime(150, t);
-      osc.frequency.exponentialRampToValueAtTime(0.01, t + 0.5);
-      gain.gain.setValueAtTime(0.8, t);
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.5);
-    } else if (isSnare) {
-      // SNARE / CLAP
-      const noiseBuffer = getNoiseBuffer(ctx);
-      const noise = ctx.createBufferSource();
-      noise.buffer = noiseBuffer;
-      const noiseFilter = ctx.createBiquadFilter();
-      noiseFilter.type = 'highpass';
-      noiseFilter.frequency.value = 1000;
-      const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.5, t);
-      noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
-      
-      const osc = ctx.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(250, t);
-      const oscGain = ctx.createGain();
-      oscGain.gain.setValueAtTime(0.2, t);
-      oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
-
-      noise.connect(noiseFilter);
-      noiseFilter.connect(noiseGain);
-      noiseGain.connect(ctx.destination);
-      osc.connect(oscGain);
-      oscGain.connect(ctx.destination);
-      noise.start(t);
-      osc.start(t);
-      noise.stop(t + 0.2);
-      osc.stop(t + 0.2);
+    // DYNAMIC SOUND GENERATION based on soundProfile
+    if (soundProfile === 'rock') {
+        // ROCK KIT: Deeper kicks, punchy snares
+        if (isKick) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.frequency.setValueAtTime(100, t);
+            osc.frequency.exponentialRampToValueAtTime(0.01, t + 0.3);
+            gain.gain.setValueAtTime(getVol(1.0), t);
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.3);
+        } else if (isSnare) {
+            const noise = ctx.createBufferSource();
+            noise.buffer = getNoiseBuffer(ctx);
+            const noiseFilter = ctx.createBiquadFilter();
+            noiseFilter.type = 'lowpass';
+            noiseFilter.frequency.setValueAtTime(3000, t);
+            const noiseGain = ctx.createGain();
+            noiseGain.gain.setValueAtTime(getVol(0.8), t);
+            noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+            noise.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(ctx.destination);
+            noise.start(t);
+            noise.stop(t + 0.2);
+        } else {
+             // Closed Hat
+            const noise = ctx.createBufferSource();
+            noise.buffer = getNoiseBuffer(ctx);
+            const noiseFilter = ctx.createBiquadFilter();
+            noiseFilter.type = 'highpass';
+            noiseFilter.frequency.value = 8000;
+            const noiseGain = ctx.createGain();
+            noiseGain.gain.setValueAtTime(getVol(0.3), t);
+            noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+            noise.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(ctx.destination);
+            noise.start(t);
+            noise.stop(t + 0.05);
+        }
+    } else if (soundProfile === 'chiptune') {
+        // CHIPTUNE KIT: Square waves and noise bursts
+        if (isKick) {
+             const osc = ctx.createOscillator();
+             osc.type = 'square';
+             osc.frequency.setValueAtTime(150, t);
+             osc.frequency.linearRampToValueAtTime(10, t + 0.1);
+             const gain = ctx.createGain();
+             gain.gain.setValueAtTime(getVol(0.6), t);
+             gain.gain.linearRampToValueAtTime(0, t + 0.1);
+             osc.connect(gain);
+             gain.connect(ctx.destination);
+             osc.start(t);
+             osc.stop(t + 0.1);
+        } else if (isSnare) {
+             const noise = ctx.createBufferSource();
+             noise.buffer = getNoiseBuffer(ctx);
+             const gain = ctx.createGain();
+             gain.gain.setValueAtTime(getVol(0.6), t);
+             gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1); // Short burst
+             noise.connect(gain);
+             gain.connect(ctx.destination);
+             noise.start(t);
+             noise.stop(t + 0.1);
+        } else {
+            // Blip
+             const osc = ctx.createOscillator();
+             osc.type = 'triangle';
+             osc.frequency.setValueAtTime(2000, t);
+             const gain = ctx.createGain();
+             gain.gain.setValueAtTime(getVol(0.3), t);
+             gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+             osc.connect(gain);
+             gain.connect(ctx.destination);
+             osc.start(t);
+             osc.stop(t + 0.05);
+        }
     } else {
-      // HI-HAT
-      const noiseBuffer = getNoiseBuffer(ctx);
-      const noise = ctx.createBufferSource();
-      noise.buffer = noiseBuffer;
-      const noiseFilter = ctx.createBiquadFilter();
-      noiseFilter.type = 'highpass';
-      noiseFilter.frequency.value = 5000;
-      const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.3, t);
-      noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.05); // Short decay
-
-      noise.connect(noiseFilter);
-      noiseFilter.connect(noiseGain);
-      noiseGain.connect(ctx.destination);
-      noise.start(t);
-      noise.stop(t + 0.05);
+        // DEFAULT ELECTRONIC KIT (Clean Sine/Noise)
+        if (isKick) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.frequency.setValueAtTime(150, t);
+          osc.frequency.exponentialRampToValueAtTime(0.01, t + 0.5);
+          gain.gain.setValueAtTime(getVol(0.8), t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.5);
+        } else if (isSnare) {
+          const noiseBuffer = getNoiseBuffer(ctx);
+          const noise = ctx.createBufferSource();
+          noise.buffer = noiseBuffer;
+          const noiseFilter = ctx.createBiquadFilter();
+          noiseFilter.type = 'highpass';
+          noiseFilter.frequency.value = 1000;
+          const noiseGain = ctx.createGain();
+          noiseGain.gain.setValueAtTime(getVol(0.5), t);
+          noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+          
+          const osc = ctx.createOscillator();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(250, t);
+          const oscGain = ctx.createGain();
+          oscGain.gain.setValueAtTime(getVol(0.2), t);
+          oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+    
+          noise.connect(noiseFilter);
+          noiseFilter.connect(noiseGain);
+          noiseGain.connect(ctx.destination);
+          osc.connect(oscGain);
+          oscGain.connect(ctx.destination);
+          noise.start(t);
+          osc.start(t);
+          noise.stop(t + 0.2);
+          osc.stop(t + 0.2);
+        } else {
+          // HI-HAT
+          const noiseBuffer = getNoiseBuffer(ctx);
+          const noise = ctx.createBufferSource();
+          noise.buffer = noiseBuffer;
+          const noiseFilter = ctx.createBiquadFilter();
+          noiseFilter.type = 'highpass';
+          noiseFilter.frequency.value = 5000;
+          const noiseGain = ctx.createGain();
+          noiseGain.gain.setValueAtTime(getVol(0.3), t);
+          noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.05); // Short decay
+    
+          noise.connect(noiseFilter);
+          noiseFilter.connect(noiseGain);
+          noiseGain.connect(ctx.destination);
+          noise.start(t);
+          noise.stop(t + 0.05);
+        }
     }
   };
 
@@ -371,7 +585,7 @@ const App: React.FC = () => {
         if (type === 'kick') {
             osc.frequency.setValueAtTime(150, startTime);
             osc.frequency.exponentialRampToValueAtTime(0.01, startTime + 0.5);
-            gain.gain.setValueAtTime(1.0 * intensity, startTime);
+            gain.gain.setValueAtTime(getVol(1.0 * intensity), startTime);
             gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.5);
             osc.connect(gain);
             gain.connect(ctx.destination);
@@ -384,7 +598,7 @@ const App: React.FC = () => {
             noiseFilter.type = 'highpass';
             noiseFilter.frequency.value = 800;
             const noiseGain = ctx.createGain();
-            noiseGain.gain.setValueAtTime(0.8 * intensity, startTime);
+            noiseGain.gain.setValueAtTime(getVol(0.8 * intensity), startTime);
             noiseGain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.2);
             noise.connect(noiseFilter);
             noiseFilter.connect(noiseGain);
@@ -396,7 +610,7 @@ const App: React.FC = () => {
             tone.type = 'triangle';
             tone.frequency.setValueAtTime(180, startTime);
             const toneGain = ctx.createGain();
-            toneGain.gain.setValueAtTime(0.4 * intensity, startTime);
+            toneGain.gain.setValueAtTime(getVol(0.4 * intensity), startTime);
             toneGain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.1);
             tone.connect(toneGain);
             toneGain.connect(ctx.destination);
@@ -405,7 +619,7 @@ const App: React.FC = () => {
         } else if (type === 'tom') {
              osc.frequency.setValueAtTime(200, startTime);
              osc.frequency.exponentialRampToValueAtTime(60, startTime + 0.3);
-             gain.gain.setValueAtTime(0.7 * intensity, startTime);
+             gain.gain.setValueAtTime(getVol(0.7 * intensity), startTime);
              gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
              osc.connect(gain);
              gain.connect(ctx.destination);
@@ -418,7 +632,7 @@ const App: React.FC = () => {
             noiseFilter.type = 'highpass';
             noiseFilter.frequency.value = 2000;
             const noiseGain = ctx.createGain();
-            noiseGain.gain.setValueAtTime(1.0 * intensity, startTime);
+            noiseGain.gain.setValueAtTime(getVol(1.0 * intensity), startTime);
             noiseGain.gain.exponentialRampToValueAtTime(0.01, startTime + 2.5); // Long decay
             noise.connect(noiseFilter);
             noiseFilter.connect(noiseGain);
@@ -449,12 +663,14 @@ const App: React.FC = () => {
     if (status === GameStatus.PLAYING) {
         setStatus(GameStatus.PAUSED);
         pauseTimeRef.current = performance.now();
-        if (videoRef.current) videoRef.current.pause();
+        if (mediaRef.current) mediaRef.current.pause();
+        if (bgVideoRef.current) bgVideoRef.current.pause(); // Sync BG
     } else if (status === GameStatus.PAUSED) {
         setStatus(GameStatus.PLAYING);
         const pauseDuration = performance.now() - pauseTimeRef.current;
         totalPauseDurationRef.current += pauseDuration;
-        if (videoRef.current) videoRef.current.play().catch(() => {});
+        if (mediaRef.current) mediaRef.current.play().catch(() => {});
+        if (bgVideoRef.current) bgVideoRef.current.play().catch(() => {}); // Sync BG
         initAudio(); 
     }
   }, [status]);
@@ -464,7 +680,8 @@ const App: React.FC = () => {
       setStatus(GameStatus.OUTRO);
       initAudio(); 
       playOutroSound();
-       if (videoRef.current) videoRef.current.pause();
+       if (mediaRef.current) mediaRef.current.pause();
+       if (bgVideoRef.current) bgVideoRef.current.pause(); // Sync BG
       setTimeout(() => setStatus(GameStatus.FINISHED), 3000);
   }, []);
 
@@ -533,9 +750,10 @@ const App: React.FC = () => {
             }
         }
     } else {
+        // Play hit sound even if no note (empty key press) as requested
         playHitSound(laneIndex);
     }
-  }, [status, isAutoPlay, combo, maxCombo]);
+  }, [status, isAutoPlay, combo, maxCombo, soundProfile]);
 
   const releaseLane = useCallback((laneIndex: number) => {
     activeKeysRef.current[laneIndex] = false;
@@ -651,13 +869,16 @@ const App: React.FC = () => {
     setHitEffects(prev => prev.filter(e => Date.now() - e.id < 500));
 
     frameRef.current = requestAnimationFrame(update);
-  }, [status, health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro]);
+  }, [status, health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile]);
 
   useEffect(() => {
     if (status === GameStatus.PLAYING) {
       frameRef.current = requestAnimationFrame(update);
-      if (videoRef.current) {
-        videoRef.current.play().catch(e => console.error("Local video play error"));
+      if (mediaRef.current) {
+        mediaRef.current.play().catch(e => console.error("Local media play error"));
+      }
+      if (bgVideoRef.current) {
+        bgVideoRef.current.play().catch(() => {});
       }
     }
     return () => cancelAnimationFrame(frameRef.current);
@@ -665,7 +886,14 @@ const App: React.FC = () => {
 
   // Input Handling
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (status === GameStatus.MENU) {
+    // If settings are open, Escape closes settings first
+    if (showKeyConfig && e.key === 'Escape') {
+        setShowKeyConfig(false);
+        return;
+    }
+
+    if (status === GameStatus.MENU || status === GameStatus.TITLE) {
+        // Just play sound if pressing keys in menu for fun
         const laneIndex = activeLaneConfig.findIndex(l => l.key === e.key.toLowerCase());
         if (laneIndex !== -1 && audioCtxRef.current) {
             playHitSound(laneIndex);
@@ -703,7 +931,7 @@ const App: React.FC = () => {
     if (laneIndex !== -1) {
         triggerLane(laneIndex);
     }
-  }, [status, triggerLane, triggerOutro, togglePause, isAutoPlay, activeLaneConfig]);
+  }, [status, triggerLane, triggerOutro, togglePause, isAutoPlay, activeLaneConfig, showKeyConfig]);
 
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
     const laneIndex = activeLaneConfig.findIndex(l => l.key === e.key.toLowerCase());
@@ -801,30 +1029,52 @@ const App: React.FC = () => {
       <div className="absolute inset-0 z-0 pointer-events-auto bg-slate-950 overflow-hidden" ref={bgRef} style={{ transition: 'transform 0.05s, filter 0.05s' }}>
         
         {status === GameStatus.PLAYING || status === GameStatus.PAUSED || status === GameStatus.OUTRO ? (
-            <video
-                ref={videoRef}
-                src={localVideoSrc}
-                className="w-full h-full object-cover opacity-80"
-                onEnded={triggerOutro}
-            />
+             <>
+                {/* Visual Background */}
+                {mediaType === 'audio' ? (
+                     <video
+                        ref={bgVideoRef}
+                        src="background.mp4"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover opacity-60"
+                    />
+                ) : (
+                    <video
+                        ref={mediaRef as React.RefObject<HTMLVideoElement>}
+                        src={localVideoSrc}
+                        className="w-full h-full object-cover opacity-80"
+                        onEnded={triggerOutro}
+                    />
+                )}
+
+                {/* Audio Source (Hidden if audio-only, logic handles sync) */}
+                {mediaType === 'audio' && (
+                    <audio
+                        ref={mediaRef as React.RefObject<HTMLAudioElement>}
+                        src={localVideoSrc}
+                        onEnded={triggerOutro}
+                    />
+                )}
+            </>
         ) : (
-            // VINTAGE TV BACKGROUND
+            // VIDEO BACKGROUND FOR MENU/TITLE
             <div className="w-full h-full relative overflow-hidden bg-black">
-                {/* Static Noise */}
-                <div className="absolute inset-[-50%] opacity-[0.15] animate-[noise_0.2s_steps(2)_infinite]"
-                     style={{
-                         backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='1'/%3E%3C/svg%3E")`,
-                     }}
-                ></div>
-                {/* Flicker */}
-                <div className="absolute inset-0 bg-white/5 animate-[crt-flicker_0.15s_infinite] pointer-events-none mix-blend-overlay"></div>
-                {/* Vignette */}
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_50%,rgba(0,0,0,1)_100%)] pointer-events-none"></div>
-                {/* Scanline rolling */}
-                <div className="absolute inset-x-0 h-32 bg-white/5 animate-[v-scan_8s_linear_infinite] blur-xl pointer-events-none"></div>
+                 <video
+                    src="background.mp4" 
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 w-full h-full object-cover opacity-100"
+                 />
+                 {/* Overlays for text readability but lighter to show background */}
+                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]"></div>
             </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-r from-black via-slate-950/40 to-transparent pointer-events-none"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-black via-slate-950/20 to-transparent pointer-events-none"></div>
       </div>
 
       {/* SCANLINES */}
@@ -835,6 +1085,8 @@ const App: React.FC = () => {
           <KeyConfigMenu 
             currentKeyMode={keyMode}
             mappings={keyMappings}
+            audioSettings={audioSettings}
+            onAudioSettingsChange={setAudioSettings}
             onSave={saveKeyMappings}
             onClose={() => setShowKeyConfig(false)}
           />
@@ -863,10 +1115,63 @@ const App: React.FC = () => {
           </div>
       )}
 
-      {/* MAIN MENU */}
+      {/* TITLE SCREEN */}
+      {status === GameStatus.TITLE && (
+          <div className="relative z-30 h-full flex flex-col items-center justify-center animate-fade-in px-4">
+              <h1 className="text-7xl md:text-9xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500 tracking-tighter filter drop-shadow-[0_0_25px_rgba(6,182,212,0.6)] mb-12 text-center transform hover:scale-105 transition-transform duration-500 animate-pulse">
+                DJ<span className="text-cyan-400">BIG</span>
+              </h1>
+              
+              <div className="flex flex-col space-y-6 w-full max-w-sm">
+                  <button 
+                    onClick={() => { setStatus(GameStatus.MENU); playUiSound('select'); initAudio(); }}
+                    onMouseEnter={() => playUiSound('hover')}
+                    className="group relative px-8 py-4 bg-slate-900/80 border border-cyan-500/50 hover:bg-cyan-900/50 hover:border-cyan-400 transition-all rounded-lg overflow-hidden"
+                  >
+                      <div className="absolute inset-0 bg-cyan-400/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>
+                      <span className="relative text-2xl font-display font-bold tracking-[0.2em] text-cyan-100 group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">START</span>
+                  </button>
+
+                  <button 
+                    onClick={() => { setStatus(GameStatus.MENU); playUiSound('select'); initAudio(); }}
+                    onMouseEnter={() => playUiSound('hover')}
+                    className="group relative px-8 py-4 bg-slate-900/80 border border-slate-600 hover:border-fuchsia-400 transition-all rounded-lg"
+                  >
+                       <span className="text-xl font-display font-bold tracking-[0.2em] text-slate-400 group-hover:text-fuchsia-300">MUSIC LIST</span>
+                  </button>
+
+                  <button 
+                    onClick={() => { setShowKeyConfig(true); playUiSound('select'); }}
+                    onMouseEnter={() => playUiSound('hover')}
+                    className="group relative px-8 py-4 bg-slate-900/80 border border-slate-600 hover:border-yellow-400 transition-all rounded-lg"
+                  >
+                       <span className="text-xl font-display font-bold tracking-[0.2em] text-slate-400 group-hover:text-yellow-300">SETTING</span>
+                  </button>
+
+                  <button 
+                    onClick={() => window.location.reload()}
+                    onMouseEnter={() => playUiSound('hover')}
+                    className="group relative px-8 py-4 bg-slate-900/80 border border-slate-600 hover:border-red-500 transition-all rounded-lg"
+                  >
+                       <span className="text-xl font-display font-bold tracking-[0.2em] text-slate-400 group-hover:text-red-400">EXIT</span>
+                  </button>
+              </div>
+              <div className="mt-12 text-slate-600 font-mono text-xs">VERSION 2.7 // SYSTEM READY</div>
+          </div>
+      )}
+
+      {/* MAIN MENU (Setup Screen) */}
       {status === GameStatus.MENU && !startCountdown && (
         <div className="relative z-30 h-full flex flex-col items-center justify-center animate-fade-in px-4 overflow-y-auto py-8">
             
+          {/* BACK BUTTON */}
+          <button 
+             onClick={() => { setStatus(GameStatus.TITLE); playUiSound('select'); }}
+             className="absolute top-4 left-4 p-2 text-slate-400 hover:text-white flex items-center space-x-2 transition-colors"
+          >
+             <span className="text-2xl">←</span> <span className="font-display font-bold">BACK</span>
+          </button>
+
           {/* SETTINGS BUTTON */}
           <button 
              onClick={() => setShowKeyConfig(true)}
@@ -875,16 +1180,23 @@ const App: React.FC = () => {
              <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
           </button>
 
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500 tracking-tighter filter drop-shadow-[0_0_25px_rgba(6,182,212,0.6)] mb-4 text-center transform hover:scale-105 transition-transform duration-500">
-            DJ<span className="text-cyan-400">BIG</span>
+          <h1 className="text-4xl md:text-5xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500 tracking-tighter filter drop-shadow-[0_0_25px_rgba(6,182,212,0.6)] mb-4 text-center">
+            SETUP <span className="text-cyan-400">PHASE</span>
           </h1>
           
           <div className="w-full max-w-2xl space-y-4 p-5 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl relative transition-all duration-50 bg-black/80">
             
-            {isAnalyzing && (
-                <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center rounded-xl">
+            {(isAnalyzing || isGeneratingTheme) && (
+                <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center rounded-xl p-8 text-center">
                     <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <div className="text-cyan-400 font-mono animate-pulse">ANALYZING AUDIO SPECTRUM...</div>
+                    <div className="text-cyan-400 font-mono animate-pulse font-bold text-lg mb-2">
+                        {isGeneratingTheme ? 'SYNTHESIZING NEURAL AUDIO-VISUALS...' : 'ANALYZING AUDIO SPECTRUM...'}
+                    </div>
+                    {isGeneratingTheme && (
+                        <div className="text-xs text-slate-500 max-w-sm mt-2">
+                            Generating a custom 1080p music video using Gemini Veo. This may take up to 2 minutes. Please stand by...
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -892,14 +1204,22 @@ const App: React.FC = () => {
             <div className="animate-fade-in space-y-3">
                 <div className="flex justify-between items-end">
                     <label className="text-sm font-bold tracking-widest text-cyan-400 block">SELECT MUSIC SOURCE</label>
-                    {songList.length > 0 && (
+                    <div className="flex gap-4">
                         <button 
-                            onClick={() => { setSongList([]); setLocalFileName(''); setAnalyzedNotes(null); }}
-                            className="text-xs text-red-400 hover:text-red-300 underline font-mono"
+                            onClick={generateAiTheme}
+                            className="text-xs text-fuchsia-400 hover:text-fuchsia-300 font-bold font-display animate-pulse flex items-center gap-1"
                         >
-                            CLEAR PLAYLIST
+                            <span>★</span> GENERATE AI THEME
                         </button>
-                    )}
+                        {songList.length > 0 && (
+                            <button 
+                                onClick={() => { setSongList([]); setLocalFileName(''); setAnalyzedNotes(null); }}
+                                className="text-xs text-red-400 hover:text-red-300 underline font-mono"
+                            >
+                                CLEAR PLAYLIST
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {songList.length === 0 ? (
@@ -1043,16 +1363,13 @@ const App: React.FC = () => {
             <button 
                 onClick={startCountdownSequence}
                 onMouseEnter={() => playUiSound('hover')}
-                disabled={isAnalyzing || !analyzedNotes}
+                disabled={isAnalyzing || !analyzedNotes || isGeneratingTheme}
                 className={`w-full py-3 bg-gradient-to-r from-cyan-700 to-blue-700 text-white font-display font-bold text-xl tracking-widest uppercase transition-all transform shadow-[0_0_30px_rgba(6,182,212,0.4)] border border-cyan-400/50
-                    ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:from-cyan-600 hover:to-blue-600 hover:scale-[1.02] animate-pulse'}
+                    ${(isAnalyzing || !analyzedNotes || isGeneratingTheme) ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:from-cyan-600 hover:to-blue-600 hover:scale-[1.02] animate-pulse'}
                 `}
             >
                 {isAnalyzing ? 'ANALYZING...' : 'Game Start!!'}
             </button>
-            <div className="text-[10px] text-slate-500 text-center font-mono">
-                CONTROLS: F1/F2 (Speed) | F4 (Auto) | F9 (End) | ESC (Pause)
-            </div>
           </div>
         </div>
       )}
@@ -1143,7 +1460,7 @@ const App: React.FC = () => {
                 <div className="text-right pointer-events-none">
                     <h2 className="text-6xl font-display font-bold text-white/40 tracking-widest drop-shadow-md">NEON PROTOCOL</h2>
                     <div className="text-cyan-500/80 font-mono mt-2 bg-black/60 inline-block px-4 py-1 rounded backdrop-blur-md border border-cyan-500/30">
-                        SYSTEM LINKED: {localFileName ? localFileName : 'LOCAL_FILE'} // MODE: {keyMode}K // LEVEL {level}
+                        SYSTEM LINKED: {localFileName ? localFileName : 'LOCAL_FILE'} // MODE: {keyMode}K // KIT: {soundProfile.toUpperCase()}
                     </div>
                 </div>
             </div>
@@ -1151,7 +1468,11 @@ const App: React.FC = () => {
       )}
       
       {status === GameStatus.PAUSED && (
-        <PauseMenu onResume={() => { togglePause(); playUiSound('select'); }} onQuit={quitGame} />
+        <PauseMenu 
+            onResume={() => { togglePause(); playUiSound('select'); }} 
+            onSettings={() => { setShowKeyConfig(true); playUiSound('select'); }}
+            onQuit={quitGame} 
+        />
       )}
 
       {status === GameStatus.FINISHED && (
