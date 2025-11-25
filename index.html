@@ -150,6 +150,18 @@
         10% { opacity: 1; }
         100% { transform: translate(var(--tx), var(--ty)); opacity: 0; }
       }
+
+      /* CYBER COMBO SLAM */
+      @keyframes cyber-slam {
+        0% { transform: scale(1.5) translateZ(0); opacity: 0.8; text-shadow: -4px 0 red, 4px 0 cyan; color: white; }
+        15% { transform: scale(0.9) translateZ(0); opacity: 0.6; text-shadow: 2px 0 red, -2px 0 cyan; }
+        30% { transform: scale(1.1) translateZ(0); opacity: 0.5; text-shadow: -1px 0 red, 1px 0 cyan; }
+        100% { transform: scale(1) translateZ(0); opacity: 0.15; text-shadow: none; color: #cbd5e1; }
+      }
+      
+      .animate-cyber-slam {
+        animation: cyber-slam 0.15s cubic-bezier(0.1, 0.7, 1.0, 0.1) forwards;
+      }
     </style>
   <script type="importmap">
 {

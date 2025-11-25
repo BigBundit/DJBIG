@@ -1,33 +1,77 @@
 
 import React from 'react';
-import { Note as NoteType, LaneColor } from '../types';
+import { Note as NoteType, LaneColor, Theme } from '../types';
 
 interface NoteProps {
     note: NoteType;
     totalLanes: number;
     color: LaneColor;
+    theme: Theme;
 }
 
-export const Note: React.FC<NoteProps> = ({ note, totalLanes, color }) => {
+export const Note: React.FC<NoteProps> = ({ note, totalLanes, color, theme }) => {
     const widthPerc = 100 / totalLanes;
     const leftPos = `${note.laneIndex * widthPerc}%`;
     
-    // Construct styles from the LaneColor object passed in
+    // Construct styles
+    // We adjust height and visuals based on theme
+    
+    let shapeClass = '';
+    let innerContent = null;
+    let containerStyle: React.CSSProperties = {
+        left: leftPos, 
+        top: `${note.y}%`,
+        width: `${widthPerc}%`,
+        height: '3%' // Default height
+    };
+
     const colorClass = `${color.bg} ${color.noteShadow}`;
+
+    switch (theme.noteShape) {
+        case 'circle':
+            shapeClass = `rounded-full ${colorClass}`;
+            containerStyle.height = '4%'; // Slightly taller for circle aspect
+            break;
+        case 'diamond':
+            shapeClass = `rotate-45 scale-75 ${colorClass} rounded-sm`;
+            containerStyle.height = '4%';
+            break;
+        case 'arrow':
+            shapeClass = `${color.bg}`;
+            // CSS Triangle
+            containerStyle.clipPath = 'polygon(0% 0%, 100% 0%, 50% 100%)';
+            containerStyle.filter = `drop-shadow(0 0 10px ${color.base})`; // Drop shadow works differently with clip-path
+            containerStyle.height = '4%';
+            break;
+        case 'hex':
+            shapeClass = `${colorClass}`;
+            containerStyle.clipPath = 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)';
+            containerStyle.height = '4.5%';
+            break;
+        case 'star':
+            shapeClass = `flex items-center justify-center text-2xl ${color.text} drop-shadow-md`;
+            innerContent = '★';
+            containerStyle.height = '4%';
+            break;
+        case 'square':
+            shapeClass = `${colorClass}`; // No rounding
+            break;
+        default: // rect
+            shapeClass = `rounded-[2px] ${colorClass}`;
+            break;
+    }
+
+    // Adjust for specific themes having standard inner highlights
+    const showHighlight = theme.noteShape === 'rect' || theme.noteShape === 'circle' || theme.noteShape === 'square';
 
     return (
         <div 
-            className="absolute z-20 will-change-transform px-[2px]"
-            style={{ 
-                left: leftPos, 
-                top: `${note.y}%`,
-                width: `${widthPerc}%`,
-                height: '2.5%' 
-            }}
+            className="absolute z-20 will-change-transform px-[2px] flex justify-center items-center"
+            style={containerStyle}
         >
-            {/* Note Head */}
-            <div className={`w-full h-full rounded-[2px] ${colorClass} relative`}>
-                <div className="absolute inset-x-0 top-0 h-[40%] bg-white/60"></div>
+            <div className={`w-full h-full relative transition-all ${shapeClass}`}>
+                {showHighlight && <div className="absolute inset-x-0 top-0 h-[40%] bg-white/60 w-full"></div>}
+                {innerContent}
             </div>
         </div>
     );

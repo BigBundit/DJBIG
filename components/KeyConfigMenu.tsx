@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { KeyMapping, LaneConfig, AudioSettings } from '../types';
+import { KeyMapping, LaneConfig, AudioSettings, LayoutSettings } from '../types';
 import { LANE_CONFIGS_4, LANE_CONFIGS_5, LANE_CONFIGS_7 } from '../constants';
 
 interface KeyConfigMenuProps {
@@ -8,6 +8,8 @@ interface KeyConfigMenuProps {
     mappings: KeyMapping;
     audioSettings: AudioSettings;
     onAudioSettingsChange: (settings: AudioSettings) => void;
+    layoutSettings: LayoutSettings;
+    onLayoutSettingsChange: (settings: LayoutSettings) => void;
     onSave: (newMappings: KeyMapping) => void;
     onClose: () => void;
 }
@@ -17,6 +19,8 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
     mappings, 
     audioSettings,
     onAudioSettingsChange,
+    layoutSettings,
+    onLayoutSettingsChange,
     onSave, 
     onClose 
 }) => {
@@ -106,6 +110,13 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
         });
     };
 
+    const handlePositionChange = (pos: 'left' | 'center' | 'right') => {
+        onLayoutSettingsChange({
+            ...layoutSettings,
+            lanePosition: pos
+        });
+    };
+
     const activeConfig = getBaseConfig(activeMode);
     const currentBoundKeys = localMappings[activeMode];
 
@@ -116,8 +127,10 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
 
                 <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                     {/* DISPLAY SETTINGS */}
-                    <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 h-full">
-                         <h3 className="text-cyan-400 font-bold tracking-widest text-sm mb-4 border-b border-slate-700 pb-2">DISPLAY</h3>
+                    <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 h-full flex flex-col space-y-6">
+                         <h3 className="text-cyan-400 font-bold tracking-widest text-sm border-b border-slate-700 pb-2">DISPLAY</h3>
+                         
+                         {/* Fullscreen Toggle */}
                          <div className="flex justify-between items-center">
                             <div>
                                 <div className="text-slate-200 font-mono font-bold">FULL SCREEN</div>
@@ -129,6 +142,26 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                             >
                                 <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${isFullscreen ? 'right-1' : 'left-1'}`}></div>
                             </button>
+                         </div>
+
+                         {/* Lane Position Controls */}
+                         <div>
+                            <div className="text-slate-200 font-mono font-bold mb-2">LANE POSITION</div>
+                            <div className="flex rounded border border-slate-600 overflow-hidden">
+                                {(['left', 'center', 'right'] as const).map((pos) => (
+                                    <button
+                                        key={pos}
+                                        onClick={() => handlePositionChange(pos)}
+                                        className={`flex-1 py-2 text-xs font-bold uppercase transition-colors ${
+                                            layoutSettings.lanePosition === pos
+                                            ? 'bg-cyan-600 text-white'
+                                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                        }`}
+                                    >
+                                        {pos}
+                                    </button>
+                                ))}
+                            </div>
                          </div>
                     </div>
 

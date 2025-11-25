@@ -47,12 +47,12 @@ export interface HitEffectData {
     timestamp: number;
 }
 
-export interface GameState {
-    status: GameStatus;
-    score: number;
-    combo: number;
+export interface GameStats {
+    perfect: number;
+    good: number;
+    miss: number;
     maxCombo: number;
-    health: number;
+    score: number;
 }
 
 export interface HighScore {
@@ -61,14 +61,6 @@ export interface HighScore {
     maxCombo: number;
     missCount: number;
     timestamp: number;
-}
-
-export interface GameStats {
-    perfect: number;
-    good: number;
-    miss: number;
-    maxCombo: number;
-    score: number;
 }
 
 export interface SongMetadata {
@@ -89,4 +81,31 @@ export interface KeyMapping {
 export interface AudioSettings {
     masterVolume: number;
     sfxVolume: number;
+}
+
+export interface LayoutSettings {
+    lanePosition: 'left' | 'center' | 'right';
+}
+
+// --- THEME SYSTEM TYPES ---
+
+export type ThemeId = 'neon' | 'ignore';
+
+export interface Theme {
+    id: ThemeId;
+    name: string;
+    description: string;
+    unlockDescription: string;
+    // Visual indicators
+    noteShape: 'rect' | 'circle' | 'diamond' | 'arrow' | 'square' | 'hex' | 'star';
+    receptorStyle: 'line' | 'ring' | 'box' | 'bracket' | 'button';
+}
+
+export interface PlayerStats {
+    totalGamesPlayed: number;
+    highestComboEver: number;
+    totalScore: number;
+    totalPerfects: number;
+    highestLevelCleared: number;
+    highestSpeedUsed: number;
 }

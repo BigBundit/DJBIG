@@ -1,5 +1,5 @@
 
-import { LaneConfig, KeyMapping } from './types';
+import { LaneConfig, KeyMapping, Theme } from './types';
 
 export const BASE_FALL_SPEED_MS = 1500; 
 export const HIT_WINDOW_PERFECT = 45;
@@ -42,7 +42,6 @@ export const DEFAULT_KEY_MAPPINGS: KeyMapping = {
 };
 
 // 4 KEYS: D, F, J, K
-// Colors: D(Fuchsia), F(Cyan), J(Cyan), K(Fuchsia)
 export const LANE_CONFIGS_4: LaneConfig[] = [
     { index: 0, key: 'd', label: 'D', color: COLOR_FUCHSIA },
     { index: 1, key: 'f', label: 'F', color: COLOR_CYAN },
@@ -51,7 +50,6 @@ export const LANE_CONFIGS_4: LaneConfig[] = [
 ];
 
 // 5 KEYS: D, F, SPACE, J, K
-// Colors: D(Fuchsia), F(Cyan), SPACE(Yellow), J(Cyan), K(Fuchsia)
 export const LANE_CONFIGS_5: LaneConfig[] = [
     { index: 0, key: 'd', label: 'D', color: COLOR_FUCHSIA },
     { index: 1, key: 'f', label: 'F', color: COLOR_CYAN },
@@ -61,7 +59,6 @@ export const LANE_CONFIGS_5: LaneConfig[] = [
 ];
 
 // 7 KEYS: S, D, F, SPACE, J, K, L
-// Colors: S(Cyan), D(Fuchsia), F(Cyan), SPACE(Yellow), J(Cyan), K(Fuchsia), L(Cyan)
 export const LANE_CONFIGS_7: LaneConfig[] = [
     { index: 0, key: 's', label: 'S', color: COLOR_CYAN },
     { index: 1, key: 'd', label: 'D', color: COLOR_FUCHSIA },
@@ -70,4 +67,25 @@ export const LANE_CONFIGS_7: LaneConfig[] = [
     { index: 4, key: 'j', label: 'J', color: COLOR_CYAN },
     { index: 5, key: 'k', label: 'K', color: COLOR_FUCHSIA },
     { index: 6, key: 'l', label: 'L', color: COLOR_CYAN },
+];
+
+// --- THEMES ---
+
+export const GAME_THEMES: Theme[] = [
+    {
+        id: 'ignore',
+        name: 'IGNORE PROTOCOL',
+        description: 'Advanced Handheld Simulation with tactical HUD.',
+        unlockDescription: 'Unlocked Default',
+        noteShape: 'rect',
+        receptorStyle: 'button'
+    },
+    {
+        id: 'neon',
+        name: 'NEON CORE',
+        description: 'The Classic Interface. Optimized for pure visibility.',
+        unlockDescription: 'Unlocked via Customization',
+        noteShape: 'rect',
+        receptorStyle: 'line'
+    }
 ];
