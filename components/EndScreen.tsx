@@ -7,9 +7,11 @@ interface EndScreenProps {
     fileName: string;
     onRestart: () => void;
     onMenu: () => void;
+    t: any;
+    fontClass: string;
 }
 
-export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart, onMenu }) => {
+export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart, onMenu, t, fontClass }) => {
     const [highScoreData, setHighScoreData] = useState<HighScore | null>(null);
     const [isNewRecord, setIsNewRecord] = useState(false);
     const [playerName, setPlayerName] = useState("");
@@ -111,15 +113,15 @@ export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart
                         {rank}
                     </div>
                     <div className="mt-4 text-center">
-                        <div className="text-xs text-slate-500 mb-1">TOTAL SCORE</div>
+                        <div className={`text-xs text-slate-500 mb-1 ${fontClass}`}>{t.TOTAL_SCORE}</div>
                         <div className="text-3xl font-mono font-bold text-white">{stats.score.toLocaleString()}</div>
                     </div>
                 </div>
 
                 {/* RIGHT: DETAILED STATS */}
                 <div className="flex-[2] flex flex-col space-y-6 w-full">
-                    <h2 className="text-3xl font-display font-bold text-white tracking-tighter text-center md:text-left">
-                        MISSION RESULTS
+                    <h2 className={`text-3xl font-bold text-white tracking-tighter text-center md:text-left ${fontClass}`}>
+                        {t.MISSION_RESULTS}
                     </h2>
                     
                     <div className="grid grid-cols-2 gap-4 w-full">
@@ -136,7 +138,7 @@ export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart
                             <span className="text-xl font-bold text-red-400">{stats.miss}</span>
                         </div>
                         <div className="bg-slate-800/50 p-3 rounded border border-slate-700 flex justify-between items-center">
-                            <span className="text-yellow-200 text-xs tracking-widest">MAX COMBO</span>
+                            <span className={`text-yellow-200 text-xs tracking-widest ${fontClass}`}>{t.COMBO}</span>
                             <span className="text-xl font-bold text-yellow-400">{stats.maxCombo}</span>
                         </div>
                     </div>
@@ -144,23 +146,23 @@ export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart
                     {/* NEW RECORD INPUT */}
                     {isNewRecord && !nameSaved && (
                         <div className="w-full bg-cyan-900/30 border border-cyan-500 p-4 rounded-lg text-center animate-pulse-slow mt-4">
-                            <h3 className="text-lg font-display font-bold text-yellow-400 mb-2">
-                                ★ NEW RECORD HOLDER ★
+                            <h3 className={`text-lg font-bold text-yellow-400 mb-2 ${fontClass}`}>
+                                ★ {t.NEW_RECORD} ★
                             </h3>
                             <div className="flex space-x-2 justify-center">
                                 <input 
                                     type="text"
                                     maxLength={10}
-                                    placeholder="ENTER NAME"
+                                    placeholder={t.ENTER_NAME}
                                     value={playerName}
                                     onChange={(e) => setPlayerName(e.target.value)}
-                                    className="bg-black/50 border-b-2 border-cyan-400 text-center text-xl text-white font-mono p-1 focus:outline-none uppercase w-40"
+                                    className={`bg-black/50 border-b-2 border-cyan-400 text-center text-xl text-white p-1 focus:outline-none uppercase w-40 ${fontClass}`}
                                 />
                                 <button 
                                     onClick={handleSaveName}
-                                    className="px-4 py-1 bg-yellow-500 text-black font-bold font-display uppercase text-sm hover:bg-yellow-400 transition-colors rounded"
+                                    className={`px-4 py-1 bg-yellow-500 text-black font-bold uppercase text-sm hover:bg-yellow-400 transition-colors rounded ${fontClass}`}
                                 >
-                                    SAVE
+                                    {t.SAVE}
                                 </button>
                             </div>
                         </div>
@@ -169,7 +171,7 @@ export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart
                     {/* LEADERBOARD MINI */}
                     {!isNewRecord && highScoreData && (
                         <div className="w-full bg-black/40 border border-white/10 p-3 rounded flex justify-between items-center px-6">
-                            <span className="text-xs font-bold text-slate-400 uppercase">Record Holder</span>
+                            <span className={`text-xs font-bold text-slate-400 uppercase ${fontClass}`}>{t.RECORD_HOLDER}</span>
                             <div className="flex items-center space-x-2">
                                 <span className="text-lg font-display font-bold text-white">{highScoreData.playerName}</span>
                                 <span className="text-sm font-mono text-cyan-400">{highScoreData.score.toLocaleString()}</span>
@@ -180,15 +182,15 @@ export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart
                     <div className="flex space-x-4 mt-4 justify-center md:justify-start">
                         <button 
                             onClick={onRestart}
-                            className="px-6 py-3 bg-cyan-700 hover:bg-cyan-600 text-white font-bold tracking-widest transition-colors shadow-[0_0_15px_rgba(6,182,212,0.4)] flex-1 rounded"
+                            className={`px-6 py-3 bg-cyan-700 hover:bg-cyan-600 text-white font-bold tracking-widest transition-colors shadow-[0_0_15px_rgba(6,182,212,0.4)] flex-1 rounded ${fontClass}`}
                         >
-                            RETRY
+                            {t.RETRY}
                         </button>
                         <button 
                             onClick={onMenu}
-                            className="px-6 py-3 border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white font-bold tracking-widest transition-colors flex-1 rounded"
+                            className={`px-6 py-3 border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white font-bold tracking-widest transition-colors flex-1 rounded ${fontClass}`}
                         >
-                            MENU
+                            {t.MENU}
                         </button>
                     </div>
                 </div>

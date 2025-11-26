@@ -95,5 +95,13 @@ export const GAME_THEMES: Theme[] = [
         unlockDescription: 'Unlocked via Customization',
         noteShape: 'hex',
         receptorStyle: 'bracket'
+    },
+    {
+        id: 'queen',
+        name: 'QUEEN PROTOCOL',
+        description: 'Sophisticated royal interface in violet and gold.',
+        unlockDescription: 'Unlocked via Customization',
+        noteShape: 'diamond',
+        receptorStyle: 'button'
     }
 ];

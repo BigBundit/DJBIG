@@ -31,6 +31,7 @@ import { KeyConfigMenu } from './components/KeyConfigMenu';
 import { ThemeSelectionMenu } from './components/ThemeSelectionMenu';
 import { analyzeAudioAndGenerateNotes } from './utils/audioAnalyzer';
 import { generateVideoThumbnail } from './utils/mediaUtils';
+import { TRANSLATIONS } from './translations';
 
 const audioCtxRef = { current: null as AudioContext | null };
 
@@ -45,7 +46,8 @@ const DEFAULT_STATS: PlayerStats = {
 
 const DEFAULT_LAYOUT: LayoutSettings = {
     lanePosition: 'left',
-    enableMenuBackground: true
+    enableMenuBackground: true,
+    language: 'en'
 };
 
 const App: React.FC = () => {
@@ -103,8 +105,12 @@ const App: React.FC = () => {
 
   // Theme & Progress System
   const [currentThemeId, setCurrentThemeId] = useState<ThemeId>('ignore');
-  const [unlockedThemes, setUnlockedThemes] = useState<Set<ThemeId>>(new Set(['neon', 'ignore', 'titan']));
+  const [unlockedThemes, setUnlockedThemes] = useState<Set<ThemeId>>(new Set(['neon', 'ignore', 'titan', 'queen']));
   const [playerStats, setPlayerStats] = useState<PlayerStats>(DEFAULT_STATS);
+
+  // Translations Helper
+  const t = TRANSLATIONS[layoutSettings.language];
+  const fontClass = layoutSettings.language === 'th' ? 'font-thai' : 'font-display';
 
   // Ref to hold audio settings for access within game loop/closures without dependency issues
   const audioSettingsRef = useRef<AudioSettings>(audioSettings);
@@ -132,11 +138,11 @@ const App: React.FC = () => {
       }
 
       // Themes
-      setUnlockedThemes(new Set(['neon', 'ignore', 'titan']));
+      setUnlockedThemes(new Set(['neon', 'ignore', 'titan', 'queen']));
 
       // Active Theme
       const storedActiveTheme = localStorage.getItem('djbig_active_theme');
-      if (storedActiveTheme === 'neon' || storedActiveTheme === 'ignore' || storedActiveTheme === 'titan') {
+      if (storedActiveTheme === 'neon' || storedActiveTheme === 'ignore' || storedActiveTheme === 'titan' || storedActiveTheme === 'queen') {
           setCurrentThemeId(storedActiveTheme);
       } else {
           setCurrentThemeId('ignore');
@@ -145,7 +151,10 @@ const App: React.FC = () => {
       // Layout Settings
       const storedLayout = localStorage.getItem('djbig_layout_settings');
       if (storedLayout) {
-          try { setLayoutSettings(JSON.parse(storedLayout)); } catch (e) { console.error("Failed to load layout", e); }
+          try { 
+            const parsed = JSON.parse(storedLayout);
+            setLayoutSettings({...DEFAULT_LAYOUT, ...parsed}); 
+          } catch (e) { console.error("Failed to load layout", e); }
       }
   }, []);
 
@@ -793,7 +802,7 @@ const App: React.FC = () => {
             setHitEffects(prev => [...prev, { id: Date.now() + Math.random(), laneIndex: note.laneIndex, rating: ScoreRating.PERFECT, timestamp: now }]);
             
             // AUTO PLAY DOES NOT ADD SCORE OR RANK STATS
-            setFeedback({ text: "AUTO", color: "text-fuchsia-500", id: Date.now() });
+            setFeedback({ text: t.AUTO_PILOT, color: "text-fuchsia-500", id: Date.now() });
             
             setCombo(c => {
                     const newC = c + 1;
@@ -826,7 +835,7 @@ const App: React.FC = () => {
     setHitEffects(prev => prev.filter(e => Date.now() - e.id < 500));
 
     frameRef.current = requestAnimationFrame(update);
-  }, [status, health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile]);
+  }, [status, health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile, t]);
 
   useEffect(() => {
     if (status === GameStatus.PLAYING) {
@@ -1009,6 +1018,8 @@ const App: React.FC = () => {
              <div className="absolute bottom-24 left-0 w-full h-1 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.9)] z-10 opacity-80 pointer-events-none"></div>
         ) : currentThemeId === 'titan' ? (
              <div className="absolute bottom-20 left-0 w-full h-[2px] bg-amber-500/80 shadow-[0_0_10px_rgba(245,158,11,0.5)] z-10 pointer-events-none"></div>
+        ) : currentThemeId === 'queen' ? (
+             <div className="absolute bottom-16 left-0 w-full h-[2px] bg-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.8)] z-10 pointer-events-none"></div>
         ) : (
              <div className="absolute bottom-20 left-0 w-full h-px bg-white/20 pointer-events-none"></div>
         )}
@@ -1045,14 +1056,14 @@ const App: React.FC = () => {
         {/* CENTER HUD: COMBO & JUDGMENT */}
         <div className="absolute top-[30%] left-0 right-0 flex flex-col items-center pointer-events-none z-50">
             {isAutoPlay && (
-                 <div className="text-xl font-display font-bold text-fuchsia-500 animate-pulse mb-2 border border-fuchsia-500 px-2 bg-black/50">
-                    AUTO PILOT
+                 <div className={`text-xl ${fontClass} font-bold text-fuchsia-500 animate-pulse mb-2 border border-fuchsia-500 px-2 bg-black/50`}>
+                    {t.AUTO_PILOT}
                  </div>
             )}
             
             {/* COMBO COUNTER */}
             <div className="flex flex-col items-center">
-                <div className="text-sm font-bold text-slate-500/50 tracking-[0.3em] mb-[-10px]">COMBO</div>
+                <div className={`text-sm font-bold text-slate-500/50 tracking-[0.3em] mb-[-10px] ${fontClass}`}>{t.COMBO}</div>
                 <div 
                     key={combo} 
                     className={`text-9xl font-display font-black italic tracking-tighter opacity-20 ${combo > 0 ? 'animate-cyber-slam' : ''}`}
@@ -1092,7 +1103,7 @@ const App: React.FC = () => {
 
                     {/* RIGHT SIDEBAR: VERTICAL GAUGE */}
                     <div className="w-6 bg-slate-900 border-l border-slate-700 relative flex flex-col justify-end p-0.5">
-                        <div className="absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text" style={{writingMode: 'vertical-rl'}}>GROOVE</div>
+                        <div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`} style={{writingMode: 'vertical-rl'}}>{t.GROOVE}</div>
                         <div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700">
                                 <div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div>
                         </div>
@@ -1103,11 +1114,11 @@ const App: React.FC = () => {
                 {/* BOTTOM DASHBOARD */}
                 <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner">
                         <div className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left">
-                            <div className="text-[8px] text-slate-400 font-bold">SPEED</div>
+                            <div className={`text-[8px] text-slate-400 font-bold ${fontClass}`}>{t.SCROLL_SPEED}</div>
                             <div className="text-sm font-display text-white">{speedMod.toFixed(2)}</div>
                         </div>
                         <div className="flex flex-col items-center bg-black px-3 py-1 rounded border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)]">
-                            <div className="text-[8px] text-red-900 font-bold tracking-widest w-full text-center">SCORE</div>
+                            <div className={`text-[8px] text-red-900 font-bold tracking-widest w-full text-center ${fontClass}`}>{t.SCORE}</div>
                             <div className="font-mono text-2xl text-red-600 font-bold tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">
                                 {score.toString().padStart(7, '0')}
                             </div>
@@ -1134,13 +1145,13 @@ const App: React.FC = () => {
                      <div className="absolute bottom-0 left-0 w-full h-1 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#f59e0b_10px,#f59e0b_20px)] opacity-50"></div>
                      
                      <div className="flex flex-col">
-                        <div className="text-[10px] text-amber-500 font-bold tracking-widest">SYSTEM INTEGRITY</div>
+                        <div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SYSTEM_INTEGRITY}</div>
                         <div className="w-32 h-3 bg-slate-950 border border-slate-600 mt-1">
                             <div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-amber-500'}`} style={{width: `${health}%`}}></div>
                         </div>
                      </div>
                      <div className="text-right">
-                        <div className="text-[10px] text-amber-500 font-bold tracking-widest">SCORE OUTPUT</div>
+                        <div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SCORE_OUTPUT}</div>
                         <div className="text-2xl font-mono font-bold text-amber-100">{score.toString().padStart(7, '0')}</div>
                      </div>
                 </div>
@@ -1159,7 +1170,52 @@ const App: React.FC = () => {
             </div>
         );
     }
-    // 3. CLASSIC (NEON CORE)
+    // 3. ROYAL (QUEEN PROTOCOL) - BLACK/PURPLE/PINK
+    else if (currentThemeId === 'queen') {
+        return (
+            <div className={`
+                relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
+                overflow-hidden bg-gradient-to-b from-black via-purple-950 to-pink-900 shadow-[0_0_60px_rgba(236,72,153,0.3)]
+                flex flex-col border-x-4 border-pink-800
+            `}>
+                {/* Top Royal Stats */}
+                <div className="w-full py-4 px-6 flex justify-between items-center bg-black/60 backdrop-blur-md border-b border-pink-800">
+                    <div className="flex flex-col">
+                        <div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.GRACE}</div>
+                         <div className="w-32 h-2 bg-purple-950 border border-purple-700 rounded-full mt-1 overflow-hidden">
+                            <div className={`h-full transition-all duration-200 bg-gradient-to-r from-purple-600 to-pink-500`} style={{width: `${health}%`}}></div>
+                        </div>
+                    </div>
+                    <div className="flex flex-col items-end">
+                        <div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.POWER}</div>
+                        <div className="text-3xl font-display font-bold text-pink-100 drop-shadow-[0_0_10px_rgba(236,72,153,0.8)]">
+                            {score.toString().padStart(7, '0')}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Gameplay Area with Elegant Side Bars */}
+                <div className="flex-1 relative flex">
+                     {/* Left Pillar */}
+                    <div className="w-2 h-full bg-gradient-to-b from-purple-900 via-pink-900 to-purple-900"></div>
+                    
+                    {/* Main Lane */}
+                    <div className="flex-1 relative bg-black/40">
+                         {/* Subtle Diamond Pattern BG */}
+                        <div className="absolute inset-0 opacity-20" style={{backgroundImage: 'linear-gradient(135deg, #be185d 25%, transparent 25%), linear-gradient(225deg, #be185d 25%, transparent 25%), linear-gradient(45deg, #be185d 25%, transparent 25%), linear-gradient(315deg, #be185d 25%, transparent 25%)', backgroundPosition: '10px 0, 10px 0, 0 0, 0 0', backgroundSize: '20px 20px', backgroundRepeat: 'repeat'}}></div>
+                        {renderLanes()}
+                    </div>
+
+                    {/* Right Pillar */}
+                    <div className="w-2 h-full bg-gradient-to-b from-purple-900 via-pink-900 to-purple-900"></div>
+                </div>
+
+                 {/* Bottom Decoration */}
+                 <div className="h-2 w-full bg-gradient-to-r from-purple-900 via-pink-600 to-purple-900"></div>
+            </div>
+        );
+    }
+    // 4. CLASSIC (NEON CORE)
     else {
         return (
             <div className={`
@@ -1170,13 +1226,13 @@ const App: React.FC = () => {
                 {/* Top Stats Bar for Classic View */}
                 <div className="w-full flex justify-between items-start p-4 bg-gradient-to-b from-slate-900 to-transparent z-30 pointer-events-none border-b border-white/10">
                         <div className="w-1/3">
-                        <div className="text-xs text-cyan-400 font-bold">INTEGRITY</div>
+                        <div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.INTEGRITY}</div>
                         <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
                             <div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-cyan-500'}`} style={{width: `${health}%`}}></div>
                         </div>
                         </div>
                         <div className="w-1/3 text-right">
-                        <div className="text-xs text-cyan-400 font-bold">SCORE</div>
+                        <div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.SCORE}</div>
                         <div className="text-4xl font-mono text-white glow-text">{score.toString().padStart(7, '0')}</div>
                         </div>
                 </div>
@@ -1259,6 +1315,8 @@ const App: React.FC = () => {
             onLayoutSettingsChange={handleLayoutChange}
             onSave={saveKeyMappings}
             onClose={() => setShowKeyConfig(false)}
+            t={t}
+            fontClass={fontClass}
           />
       )}
 
@@ -1268,6 +1326,8 @@ const App: React.FC = () => {
             currentTheme={currentThemeId}
             onSelectTheme={handleSelectTheme}
             onClose={() => setShowThemeMenu(false)}
+            t={t}
+            fontClass={fontClass}
           />
       )}
 
@@ -1287,8 +1347,8 @@ const App: React.FC = () => {
                   <h1 className="text-9xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-cyan-500 filter drop-shadow-[0_0_50px_rgba(6,182,212,0.8)]">
                       DJ<span className="text-cyan-400">BIG</span>
                   </h1>
-                  <div className="text-2xl font-mono text-cyan-200 tracking-[1em] mt-4 animate-pulse">
-                      SESSION COMPLETE
+                  <div className={`text-2xl font-mono text-cyan-200 tracking-[1em] mt-4 animate-pulse ${fontClass}`}>
+                      {t.MISSION_RESULTS}
                   </div>
               </div>
           </div>
@@ -1303,11 +1363,11 @@ const App: React.FC = () => {
               </h1>
               
               <div className="mb-12 text-center bg-black/50 backdrop-blur-sm p-4 rounded-lg border border-white/5">
-                  <p className="text-cyan-400 font-display font-bold tracking-[0.15em] text-sm md:text-base mb-1">
-                      CUSTOM RHYTHM ENGINE
+                  <p className={`text-cyan-400 font-bold tracking-[0.15em] text-sm md:text-base mb-1 ${fontClass}`}>
+                      {t.SUBTITLE}
                   </p>
-                  <p className="text-slate-400 font-mono text-xs md:text-sm tracking-widest">
-                      PLAY WITH YOUR OWN MP4 VIDEO FILES
+                  <p className={`text-slate-400 font-mono text-xs md:text-sm tracking-widest ${fontClass}`}>
+                      {t.SUBTITLE_2}
                   </p>
               </div>
               
@@ -1318,7 +1378,7 @@ const App: React.FC = () => {
                     className="group relative px-8 py-4 bg-slate-900/80 border border-cyan-500/50 hover:bg-cyan-900/50 hover:border-cyan-400 transition-all rounded-lg overflow-hidden"
                   >
                       <div className="absolute inset-0 bg-cyan-400/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>
-                      <span className="relative text-2xl font-display font-bold tracking-[0.2em] text-cyan-100 group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]">START</span>
+                      <span className={`relative text-2xl font-bold tracking-[0.2em] text-cyan-100 group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(34,211,238,0.8)] ${fontClass}`}>{t.START}</span>
                   </button>
 
                   <button 
@@ -1326,7 +1386,7 @@ const App: React.FC = () => {
                     onMouseEnter={() => playUiSound('hover')}
                     className="group relative px-8 py-4 bg-slate-900/80 border border-slate-600 hover:border-purple-400 transition-all rounded-lg"
                   >
-                       <span className="text-xl font-display font-bold tracking-[0.2em] text-slate-400 group-hover:text-purple-300">CUSTOMIZE</span>
+                       <span className={`text-xl font-bold tracking-[0.2em] text-slate-400 group-hover:text-purple-300 ${fontClass}`}>{t.CUSTOMIZE}</span>
                   </button>
 
                   <button 
@@ -1334,7 +1394,7 @@ const App: React.FC = () => {
                     onMouseEnter={() => playUiSound('hover')}
                     className="group relative px-8 py-4 bg-slate-900/80 border border-slate-600 hover:border-yellow-400 transition-all rounded-lg"
                   >
-                       <span className="text-xl font-display font-bold tracking-[0.2em] text-slate-400 group-hover:text-yellow-300">SETTING</span>
+                       <span className={`text-xl font-bold tracking-[0.2em] text-slate-400 group-hover:text-yellow-300 ${fontClass}`}>{t.SETTING}</span>
                   </button>
 
                   <button 
@@ -1342,7 +1402,7 @@ const App: React.FC = () => {
                     onMouseEnter={() => playUiSound('hover')}
                     className="group relative px-8 py-4 bg-slate-900/80 border border-slate-600 hover:border-red-500 transition-all rounded-lg"
                   >
-                       <span className="text-xl font-display font-bold tracking-[0.2em] text-slate-400 group-hover:text-red-400">EXIT</span>
+                       <span className={`text-xl font-bold tracking-[0.2em] text-slate-400 group-hover:text-red-400 ${fontClass}`}>{t.EXIT}</span>
                   </button>
               </div>
           </div>
@@ -1355,14 +1415,14 @@ const App: React.FC = () => {
              onClick={() => { setStatus(GameStatus.TITLE); playUiSound('select'); }}
              className="absolute top-4 left-4 p-2 text-slate-400 hover:text-white flex items-center space-x-2 transition-colors"
           >
-             <span className="text-2xl">←</span> <span className="font-display font-bold">BACK</span>
+             <span className="text-2xl">←</span> <span className={`font-bold ${fontClass}`}>{t.BACK}</span>
           </button>
 
            <button 
              onClick={() => setShowThemeMenu(true)}
              className="absolute top-4 right-16 p-2 text-slate-400 hover:text-purple-400 transition-all duration-300 flex items-center space-x-2"
           >
-             <span className="font-display font-bold text-sm hidden md:inline">THEME</span>
+             <span className={`font-bold text-sm hidden md:inline ${fontClass}`}>{t.CUSTOMIZE}</span>
              <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12,22c4.97,0,9-4.03,9-9c0-4.97-4.03-9-9-9c-0.93,0-1.83,0.14-2.68,0.4c-0.61,0.18-0.95,0.83-0.77,1.44 c0.12,0.41,0.5,0.69,0.92,0.69c0.17,0,0.34-0.05,0.5-0.1C10.59,6.17,11.27,6,12,6c3.31,0,6,2.69,6,6c0,3.31-2.69,6-6,6 c-3.31,0-6-2.69-6-6c0-1.07,0.28-2.07,0.77-2.94C7.14,8.42,6.92,7.63,6.29,7.36C5.7,7.11,5.01,7.27,4.6,7.76 C3.57,9,2.98,10.45,3.01,12.04C3.06,17.26,7.5,21.75,12.72,21.99C17.94,22.23,22,17.88,22,12.65V12c0-0.55-0.45-1-1-1s-1,0.45-1,1 v0.65C20,16.89,16.33,20.08,12,20.08v0.01c-3.15,0-5.88-1.74-7.24-4.29l0,0l2.7-2.7c0.39-0.39,0.39-1.02,0-1.41 s-1.02-0.39-1.41,0l-2.7,2.7C2.45,13.43,2,12.74,2,12c0-0.55-0.45-1-1-1s-1,0.45-1,1c0,0.99,0.16,1.93,0.45,2.81l2.7-2.7 c0.39-0.39,1.02-0.39,1.41,0s0.39,1.02,0,1.41l-2.7,2.7C4.16,19.82,7.73,22,12,22z"/></svg>
           </button>
 
@@ -1370,7 +1430,7 @@ const App: React.FC = () => {
              onClick={() => setShowKeyConfig(true)}
              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-cyan-400 hover:rotate-90 transition-all duration-500"
           >
-             <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12-0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+             <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12-0.61l1.92,3.32c0.12-0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
           </button>
 
           <h1 className="text-4xl md:text-5xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500 tracking-tighter filter drop-shadow-[0_0_25px_rgba(6,182,212,0.6)] mb-4 text-center">
@@ -1381,8 +1441,8 @@ const App: React.FC = () => {
             {isAnalyzing && (
                 <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center rounded-xl p-8 text-center">
                     <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <div className="text-cyan-400 font-mono animate-pulse font-bold text-lg mb-2">
-                        ANALYZING AUDIO SPECTRUM...
+                    <div className={`text-cyan-400 font-mono animate-pulse font-bold text-lg mb-2 ${fontClass}`}>
+                        {t.ANALYZING}
                     </div>
                 </div>
             )}
@@ -1390,10 +1450,10 @@ const App: React.FC = () => {
             {/* ... (Menu options truncated for brevity, assume same as before) ... */}
             <div className="animate-fade-in space-y-3">
                 <div className="flex justify-between items-end">
-                    <label className="text-sm font-bold tracking-widest text-cyan-400 block">SELECT MUSIC SOURCE</label>
+                    <label className={`text-sm font-bold tracking-widest text-cyan-400 block ${fontClass}`}>{t.SELECT_SOURCE}</label>
                     <div className="flex gap-4">
                         {songList.length > 0 && (
-                            <button onClick={() => { setSongList([]); setLocalFileName(''); setAnalyzedNotes(null); }} className="text-xs text-red-400 hover:text-red-300 underline font-mono">CLEAR PLAYLIST</button>
+                            <button onClick={() => { setSongList([]); setLocalFileName(''); setAnalyzedNotes(null); }} className={`text-xs text-red-400 hover:text-red-300 underline ${fontClass}`}>{t.CLEAR_PLAYLIST}</button>
                         )}
                     </div>
                 </div>
@@ -1402,13 +1462,13 @@ const App: React.FC = () => {
                         <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-slate-700 border-dashed rounded cursor-pointer hover:bg-slate-800 hover:border-cyan-500 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')} onClick={() => playUiSound('select')}>
                             <div className="flex flex-col items-center justify-center">
                                 <span className="text-2xl mb-1 text-slate-500 group-hover:text-cyan-400">📄</span>
-                                <p className="text-xs text-slate-400 font-mono group-hover:text-cyan-300 transition-colors text-center">LOAD SINGLE FILE<br/><span className="text-[10px] opacity-60">(MP4, MP3, WAV, OGG)</span></p>
+                                <p className={`text-xs text-slate-400 ${fontClass} group-hover:text-cyan-300 transition-colors text-center`}>{t.LOAD_SINGLE}<br/><span className="text-[10px] opacity-60 font-mono">(MP4, MP3, WAV, OGG)</span></p>
                             </div>
                             <input type="file" accept="video/*,audio/*" onChange={handleSingleFileUpload} className="hidden" />
                         </label>
                         <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-slate-700 border-dashed rounded cursor-pointer hover:bg-slate-800 hover:border-fuchsia-500 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')} onClick={() => playUiSound('select')}>
                             <div className="flex flex-col items-center justify-center">
-                                {isLoadingFolder ? <div className="w-6 h-6 border-2 border-fuchsia-500 border-t-transparent rounded-full animate-spin"></div> : <><span className="text-2xl mb-1 text-slate-500 group-hover:text-fuchsia-400">📂</span><p className="text-xs text-slate-400 font-mono group-hover:text-fuchsia-300 transition-colors">LOAD FOLDER</p></>}
+                                {isLoadingFolder ? <div className="w-6 h-6 border-2 border-fuchsia-500 border-t-transparent rounded-full animate-spin"></div> : <><span className="text-2xl mb-1 text-slate-500 group-hover:text-fuchsia-400">📂</span><p className={`text-xs text-slate-400 ${fontClass} group-hover:text-fuchsia-300 transition-colors`}>{t.LOAD_FOLDER}</p></>}
                             </div>
                             {/* @ts-ignore */}
                             <input type="file" webkitdirectory="" directory="" multiple onChange={handleFolderSelect} className="hidden" />
@@ -1429,7 +1489,7 @@ const App: React.FC = () => {
             </div>
             
             <div>
-                <label className="text-xs font-bold tracking-widest text-cyan-400 mb-1 block">KEY CONFIGURATION</label>
+                <label className={`text-xs font-bold tracking-widest text-cyan-400 mb-1 block ${fontClass}`}>{t.KEY_CONFIG}</label>
                 <div className="flex space-x-2">
                     {[4, 5, 7].map((k) => (
                         <button key={k} onClick={() => { setKeyMode(k as 4|5|7); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className={`flex-1 py-1.5 text-xs font-display font-bold border rounded transition-all ${keyMode === k ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'}`}>{k} KEYS</button>
@@ -1438,7 +1498,7 @@ const App: React.FC = () => {
             </div>
 
             <div>
-                <label className="text-xs font-bold tracking-widest text-cyan-400 mb-1 block flex justify-between"><span>LEVEL SELECTION</span><span className="text-white">{level}</span></label>
+                <label className={`text-xs font-bold tracking-widest text-cyan-400 mb-1 block flex justify-between ${fontClass}`}><span>{t.LEVEL}</span><span className="text-white font-mono">{level}</span></label>
                 <div className="grid grid-cols-10 gap-1">
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((l) => (
                         <button key={l} onClick={() => { setLevel(l); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className={`aspect-square font-display font-bold text-xs flex items-center justify-center border transition-all rounded ${level === l ? `bg-slate-700 text-white scale-110 z-10 shadow-[0_0_15px_rgba(255,255,255,0.2)] ${getLevelColor(l)}` : `bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700`}`}>{l}</button>
@@ -1447,11 +1507,11 @@ const App: React.FC = () => {
             </div>
 
             <div>
-                <div className="flex justify-between mb-1"><label className="text-xs font-bold tracking-widest text-cyan-400">SCROLL SPEED</label><span className="text-xs font-mono text-white">{speedMod.toFixed(1)}x</span></div>
+                <div className="flex justify-between mb-1"><label className={`text-xs font-bold tracking-widest text-cyan-400 ${fontClass}`}>{t.SCROLL_SPEED}</label><span className="text-xs font-mono text-white">{speedMod.toFixed(1)}x</span></div>
                 <input type="range" min="1.0" max="5.0" step="0.1" value={speedMod} onChange={(e) => setSpeedMod(parseFloat(e.target.value))} className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
             </div>
             
-            <button onClick={startCountdownSequence} onMouseEnter={() => playUiSound('hover')} disabled={isAnalyzing || !analyzedNotes} className={`w-full py-3 bg-gradient-to-r from-cyan-700 to-blue-700 text-white font-display font-bold text-xl tracking-widest uppercase transition-all transform shadow-[0_0_30px_rgba(6,182,212,0.4)] border border-cyan-400/50 ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:from-cyan-600 hover:to-blue-600 hover:scale-[1.02] animate-pulse'}`}>{isAnalyzing ? 'ANALYZING...' : 'Game Start!!'}</button>
+            <button onClick={startCountdownSequence} onMouseEnter={() => playUiSound('hover')} disabled={isAnalyzing || !analyzedNotes} className={`w-full py-3 bg-gradient-to-r from-cyan-700 to-blue-700 text-white font-bold text-xl tracking-widest uppercase transition-all transform shadow-[0_0_30px_rgba(6,182,212,0.4)] border border-cyan-400/50 ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:from-cyan-600 hover:to-blue-600 hover:scale-[1.02] animate-pulse'} ${fontClass}`}>{isAnalyzing ? t.ANALYZING : t.GAME_START}</button>
           </div>
         </div>
       )}
@@ -1473,10 +1533,10 @@ const App: React.FC = () => {
             `}>
                 <div className="pointer-events-none">
                     <h2 className="text-6xl font-display font-bold text-white/40 tracking-widest drop-shadow-md">
-                        {currentThemeId === 'ignore' ? 'IGNORE PROTOCOL' : currentThemeId === 'titan' ? 'TITAN CONSTRUCT' : 'NEON CORE'}
+                        {currentThemeId === 'ignore' ? 'IGNORE PROTOCOL' : currentThemeId === 'titan' ? 'TITAN CONSTRUCT' : currentThemeId === 'queen' ? 'QUEEN PROTOCOL' : 'NEON CORE'}
                     </h2>
                     <div className="text-cyan-500/80 font-mono mt-2 bg-black/60 inline-block px-4 py-1 rounded backdrop-blur-md border border-cyan-500/30">
-                        SYSTEM LINKED: {localFileName ? localFileName : 'LOCAL_FILE'} // MODE: {keyMode}K
+                        {t.SYSTEM_LINKED}: {localFileName ? localFileName : 'LOCAL_FILE'} // MODE: {keyMode}K
                     </div>
                 </div>
             </div>
@@ -1488,6 +1548,8 @@ const App: React.FC = () => {
             onResume={() => { togglePause(); playUiSound('select'); }} 
             onSettings={() => { setShowKeyConfig(true); playUiSound('select'); }}
             onQuit={quitGame} 
+            t={t}
+            fontClass={fontClass}
         />
       )}
 
@@ -1503,6 +1565,8 @@ const App: React.FC = () => {
             fileName={localFileName}
             onRestart={() => { setStatus(GameStatus.MENU); playUiSound('select'); }}
             onMenu={() => { setStatus(GameStatus.MENU); playUiSound('select'); }}
+            t={t}
+            fontClass={fontClass}
         />
       )}
     </div>

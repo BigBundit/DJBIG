@@ -12,6 +12,8 @@ interface KeyConfigMenuProps {
     onLayoutSettingsChange: (settings: LayoutSettings) => void;
     onSave: (newMappings: KeyMapping) => void;
     onClose: () => void;
+    t: any;
+    fontClass: string;
 }
 
 export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({ 
@@ -22,7 +24,9 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
     layoutSettings,
     onLayoutSettingsChange,
     onSave, 
-    onClose 
+    onClose,
+    t,
+    fontClass
 }) => {
     const [localMappings, setLocalMappings] = useState<KeyMapping>(JSON.parse(JSON.stringify(mappings)));
     const [activeMode, setActiveMode] = useState<4 | 5 | 7>(currentKeyMode);
@@ -124,24 +128,30 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
         });
     };
 
+    const handleLanguageToggle = () => {
+        onLayoutSettingsChange({
+            ...layoutSettings,
+            language: layoutSettings.language === 'en' ? 'th' : 'en'
+        });
+    };
+
     const activeConfig = getBaseConfig(activeMode);
     const currentBoundKeys = localMappings[activeMode];
 
     return (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/90 backdrop-blur-md animate-fade-in overflow-y-auto py-10">
             <div className="w-full max-w-3xl bg-slate-900 border border-cyan-500/50 p-8 rounded-xl shadow-[0_0_50px_rgba(6,182,212,0.2)] flex flex-col items-center">
-                <h2 className="text-3xl font-display font-bold text-white tracking-wider mb-6">SYSTEM SETTINGS</h2>
+                <h2 className={`text-3xl font-bold text-white tracking-wider mb-6 ${fontClass}`}>{t.SYSTEM_SETTINGS}</h2>
 
                 <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                     {/* DISPLAY SETTINGS */}
                     <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 h-full flex flex-col space-y-6">
-                         <h3 className="text-cyan-400 font-bold tracking-widest text-sm border-b border-slate-700 pb-2">DISPLAY</h3>
+                         <h3 className={`text-cyan-400 font-bold tracking-widest text-sm border-b border-slate-700 pb-2 ${fontClass}`}>{t.DISPLAY}</h3>
                          
                          {/* Fullscreen Toggle */}
                          <div className="flex justify-between items-center">
                             <div>
-                                <div className="text-slate-200 font-mono font-bold">FULL SCREEN</div>
-                                <div className="text-xs text-slate-500">Maximize game window</div>
+                                <div className={`text-slate-200 font-bold ${fontClass}`}>{t.FULL_SCREEN}</div>
                             </div>
                             <button
                                 onClick={toggleFullScreen}
@@ -154,8 +164,7 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                          {/* Menu Background Toggle */}
                          <div className="flex justify-between items-center">
                             <div>
-                                <div className="text-slate-200 font-mono font-bold">MENU BACKGROUND</div>
-                                <div className="text-xs text-slate-500">Show background video in menus</div>
+                                <div className={`text-slate-200 font-bold ${fontClass}`}>{t.MENU_BG}</div>
                             </div>
                             <button
                                 onClick={handleMenuBgToggle}
@@ -165,9 +174,24 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                             </button>
                          </div>
 
+                         {/* Language Toggle */}
+                         <div className="flex justify-between items-center">
+                            <div>
+                                <div className={`text-slate-200 font-bold ${fontClass}`}>{t.LANGUAGE}</div>
+                            </div>
+                            <button
+                                onClick={handleLanguageToggle}
+                                className={`w-20 h-8 rounded-full transition-all relative border overflow-hidden flex items-center justify-between px-2 ${layoutSettings.language === 'en' ? 'bg-slate-800 border-slate-600' : 'bg-cyan-900 border-cyan-500'}`}
+                            >
+                                <span className={`text-[10px] font-bold z-10 ${layoutSettings.language === 'th' ? 'text-white' : 'text-slate-500'}`}>TH</span>
+                                <span className={`text-[10px] font-bold z-10 ${layoutSettings.language === 'en' ? 'text-white' : 'text-slate-500'}`}>EN</span>
+                                <div className={`absolute top-0.5 bottom-0.5 w-9 bg-cyan-600 rounded-full shadow transition-all ${layoutSettings.language === 'en' ? 'right-0.5' : 'left-0.5'}`}></div>
+                            </button>
+                         </div>
+
                          {/* Lane Position Controls */}
                          <div>
-                            <div className="text-slate-200 font-mono font-bold mb-2">LANE POSITION</div>
+                            <div className={`text-slate-200 font-bold mb-2 ${fontClass}`}>{t.LANE_POS}</div>
                             <div className="flex rounded border border-slate-600 overflow-hidden">
                                 {(['left', 'center', 'right'] as const).map((pos) => (
                                     <button
@@ -188,11 +212,11 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
 
                     {/* AUDIO SETTINGS */}
                     <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 h-full">
-                         <h3 className="text-cyan-400 font-bold tracking-widest text-sm mb-4 border-b border-slate-700 pb-2">AUDIO</h3>
+                         <h3 className={`text-cyan-400 font-bold tracking-widest text-sm mb-4 border-b border-slate-700 pb-2 ${fontClass}`}>{t.AUDIO}</h3>
                          <div className="space-y-4">
                              <div className="space-y-1">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-slate-200 font-mono text-sm">MASTER VOLUME</span>
+                                    <span className={`text-slate-200 text-sm ${fontClass}`}>{t.MASTER_VOL}</span>
                                     <span className="text-cyan-400 font-mono text-xs">{Math.round(audioSettings.masterVolume * 100)}%</span>
                                 </div>
                                 <input 
@@ -204,7 +228,7 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                              </div>
                              <div className="space-y-1">
                                 <div className="flex justify-between items-center">
-                                    <span className="text-slate-200 font-mono text-sm">SFX VOLUME</span>
+                                    <span className={`text-slate-200 text-sm ${fontClass}`}>{t.SFX_VOL}</span>
                                     <span className="text-cyan-400 font-mono text-xs">{Math.round(audioSettings.sfxVolume * 100)}%</span>
                                 </div>
                                 <input 
@@ -220,7 +244,7 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
 
                 {/* KEY CONFIG SECTION */}
                 <div className="w-full">
-                    <h3 className="text-cyan-400 font-bold tracking-widest text-sm mb-4 border-b border-slate-700 pb-2 w-full">CONTROLS</h3>
+                    <h3 className={`text-cyan-400 font-bold tracking-widest text-sm mb-4 border-b border-slate-700 pb-2 w-full ${fontClass}`}>{t.CONTROLS}</h3>
                     
                     {/* Mode Select Tabs */}
                     <div className="flex space-x-4 mb-6 justify-center">
@@ -264,7 +288,7 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                         {isBinding ? '?' : keyLabel}
                                     </div>
                                     {isBinding && (
-                                        <div className="absolute -bottom-8 text-cyan-400 text-xs font-bold whitespace-nowrap animate-bounce">PRESS KEY</div>
+                                        <div className={`absolute -bottom-8 text-cyan-400 text-xs font-bold whitespace-nowrap animate-bounce ${fontClass}`}>{t.PRESS_KEY}</div>
                                     )}
                                 </div>
                             );
@@ -275,15 +299,15 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                 <div className="flex space-x-4 w-full mt-4">
                     <button 
                         onClick={resetToDefault}
-                        className="flex-1 py-3 border border-red-500/50 text-red-400 hover:bg-red-500/10 rounded font-bold tracking-widest transition-colors"
+                        className={`flex-1 py-3 border border-red-500/50 text-red-400 hover:bg-red-500/10 rounded font-bold tracking-widest transition-colors ${fontClass}`}
                     >
-                        RESET DEFAULTS
+                        {t.RESET}
                     </button>
                     <button 
                         onClick={handleSave}
-                        className="flex-[2] py-3 bg-cyan-700 hover:bg-cyan-600 text-white rounded font-bold tracking-widest transition-colors shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+                        className={`flex-[2] py-3 bg-cyan-700 hover:bg-cyan-600 text-white rounded font-bold tracking-widest transition-colors shadow-[0_0_15px_rgba(6,182,212,0.3)] ${fontClass}`}
                     >
-                        SAVE & CLOSE
+                        {t.SAVE_CLOSE}
                     </button>
                 </div>
             </div>

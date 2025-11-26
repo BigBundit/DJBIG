@@ -8,30 +8,49 @@ interface ThemeSelectionMenuProps {
     currentTheme: ThemeId;
     onSelectTheme: (id: ThemeId) => void;
     onClose: () => void;
+    t: any;
+    fontClass: string;
 }
 
 export const ThemeSelectionMenu: React.FC<ThemeSelectionMenuProps> = ({ 
     unlockedThemes, 
     currentTheme, 
     onSelectTheme, 
-    onClose 
+    onClose,
+    t,
+    fontClass
 }) => {
+
+    const getThemeDescription = (id: ThemeId) => {
+        switch(id) {
+            case 'ignore': return t.DESC_IGNORE;
+            case 'neon': return t.DESC_NEON;
+            case 'titan': return t.DESC_TITAN;
+            case 'queen': return t.DESC_QUEEN;
+            default: return "";
+        }
+    };
+
+    const getUnlockDescription = (desc: string) => {
+        if (desc.includes('Default')) return t.UNLOCK_DEFAULT;
+        return t.UNLOCK_CUSTOM;
+    };
 
     return (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-fade-in p-8">
             <div className="w-full max-w-5xl h-full flex flex-col">
                 <div className="flex justify-between items-center mb-6">
                     <div>
-                        <h2 className="text-4xl font-display font-black text-white tracking-tighter">
-                            VISUAL <span className="text-cyan-400">CUSTOMIZATION</span>
+                        <h2 className={`text-4xl font-bold text-white tracking-tighter ${fontClass}`}>
+                            {t.THEME_TITLE}
                         </h2>
-                        <p className="text-slate-400 font-mono text-sm">SELECT NOTE & LANE CONFIGURATION</p>
+                        <p className={`text-slate-400 font-mono text-sm ${fontClass}`}>{t.THEME_SUB}</p>
                     </div>
                     <button 
                         onClick={onClose}
-                        className="px-6 py-2 border border-slate-600 hover:border-white text-slate-400 hover:text-white transition-colors rounded font-bold font-display"
+                        className={`px-6 py-2 border border-slate-600 hover:border-white text-slate-400 hover:text-white transition-colors rounded font-bold ${fontClass}`}
                     >
-                        CLOSE SYSTEM
+                        {t.CLOSE_SYSTEM}
                     </button>
                 </div>
 
@@ -64,17 +83,17 @@ export const ThemeSelectionMenu: React.FC<ThemeSelectionMenuProps> = ({
 
                                 <div className="flex justify-between w-full items-start mb-4">
                                     <div className="z-10">
-                                        <h3 className={`text-xl font-display font-bold ${isSelected ? 'text-white' : isUnlocked ? 'text-slate-200' : 'text-slate-500'}`}>
+                                        <h3 className={`text-xl font-bold font-display ${isSelected ? 'text-white' : isUnlocked ? 'text-slate-200' : 'text-slate-500'}`}>
                                             {theme.name}
                                         </h3>
-                                        <div className="text-xs font-mono text-slate-500 mt-1">{theme.description}</div>
+                                        <div className={`text-xs text-slate-500 mt-1 ${fontClass}`}>{getThemeDescription(theme.id)}</div>
                                     </div>
                                     
                                     {!isUnlocked && (
                                         <div className="text-2xl text-red-500 z-10">🔒</div>
                                     )}
                                     {isUnlocked && isSelected && (
-                                        <div className="text-xs bg-cyan-500 text-black font-bold px-2 py-1 rounded z-10">EQUIPPED</div>
+                                        <div className={`text-xs bg-cyan-500 text-black font-bold px-2 py-1 rounded z-10 ${fontClass}`}>{t.EQUIPPED}</div>
                                     )}
                                 </div>
 
@@ -115,8 +134,8 @@ export const ThemeSelectionMenu: React.FC<ThemeSelectionMenuProps> = ({
                                     <div className="mt-auto w-full bg-red-900/20 border border-red-900/50 p-2 rounded flex items-center space-x-3">
                                         <div className="text-xl">🗝️</div>
                                         <div>
-                                            <div className="text-[10px] text-red-400 font-bold uppercase tracking-widest mb-0.5">LOCKED</div>
-                                            <div className="text-xs text-red-200 font-mono font-bold">{theme.unlockDescription}</div>
+                                            <div className={`text-[10px] text-red-400 font-bold uppercase tracking-widest mb-0.5 ${fontClass}`}>{t.LOCKED}</div>
+                                            <div className={`text-xs text-red-200 font-bold ${fontClass}`}>{getUnlockDescription(theme.unlockDescription)}</div>
                                         </div>
                                     </div>
                                 )}
@@ -127,8 +146,8 @@ export const ThemeSelectionMenu: React.FC<ThemeSelectionMenuProps> = ({
                 
                 {/* Stats Summary */}
                 <div className="mt-6 border-t border-slate-800 pt-4 flex justify-between text-xs font-mono text-slate-500">
-                    <div>THEMES UNLOCKED: {unlockedThemes.size} / {GAME_THEMES.length}</div>
-                    <div>KEEP PLAYING TO UNLOCK MORE VISUALS</div>
+                    <div>{t.THEMES_UNLOCKED}: {unlockedThemes.size} / {GAME_THEMES.length}</div>
+                    <div className={fontClass}>{t.KEEP_PLAYING}</div>
                 </div>
             </div>
             

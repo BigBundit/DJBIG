@@ -14,7 +14,11 @@ export const analyzeAudioAndGenerateNotes = async (
   const sampleRate = audioBuffer.sampleRate;
   
   // MAP LEVEL 1-10 to Sensitivity and Gap
-  const minNoteGap = Math.max(40, 600 - ((level - 1) * 62));
+  // PREVIOUS: Math.max(40, 600 - ((level - 1) * 62)); -> Resulted in ~40ms at Lv10 (Too dense)
+  // NEW: 600 start, stepping down 50ms per level, floor at 120ms.
+  // Lv1: 600ms, Lv5: 400ms, Lv10: 150ms.
+  const minNoteGap = Math.max(120, 600 - ((level - 1) * 50));
+  
   const sensitivity = Math.max(1.05, 2.8 - ((level - 1) * 0.19));
 
   // Chord Threshold
@@ -62,8 +66,9 @@ export const analyzeAudioAndGenerateNotes = async (
         const laneSeed = Math.floor((timeMs % 1000) / 1000 * laneCount);
         let laneIndex = laneSeed;
 
-        // Ensure lane variety
-        if (level < 9 && notes.length > 0 && notes[notes.length - 1].laneIndex === laneIndex) {
+        // Ensure lane variety (Scattered feel)
+        // Applied to ALL levels now to prevent jackhammers (same note spam)
+        if (notes.length > 0 && notes[notes.length - 1].laneIndex === laneIndex) {
             laneIndex = (laneIndex + Math.floor(laneCount / 2)) % laneCount;
         }
 
@@ -76,7 +81,7 @@ export const analyzeAudioAndGenerateNotes = async (
           missed: false
         });
 
-        // Chords
+        // Chords (Double notes)
         if (currentEnergy > averageEnergy * chordThreshold) {
              const secondLane = (laneIndex + Math.floor(laneCount / 2) + 1) % laneCount;
              notes.push({
@@ -89,8 +94,8 @@ export const analyzeAudioAndGenerateNotes = async (
               });
         }
         
-        // Triples (Level 10)
-        if (level === 10 && currentEnergy > averageEnergy * 2.0) {
+        // Triples (Level 10 Only - Massive impacts)
+        if (level === 10 && currentEnergy > averageEnergy * 2.2) {
              const thirdLane = (laneIndex + 2) % laneCount;
              notes.push({
                 id: noteId++,

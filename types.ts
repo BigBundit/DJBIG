@@ -86,11 +86,12 @@ export interface AudioSettings {
 export interface LayoutSettings {
     lanePosition: 'left' | 'center' | 'right';
     enableMenuBackground?: boolean;
+    language: 'en' | 'th';
 }
 
 // --- THEME SYSTEM TYPES ---
 
-export type ThemeId = 'neon' | 'ignore' | 'titan';
+export type ThemeId = 'neon' | 'ignore' | 'titan' | 'queen';
 
 export interface Theme {
     id: ThemeId;
@@ -99,7 +100,7 @@ export interface Theme {
     unlockDescription: string;
     // Visual indicators
     noteShape: 'rect' | 'circle' | 'diamond' | 'arrow' | 'square' | 'hex' | 'star';
-    receptorStyle: 'line' | 'ring' | 'box' | 'bracket' | 'button';
+    receptorStyle: 'line' | 'ring' | 'box' | 'bracket' | 'button' | 'diamond';
 }
 
 export interface PlayerStats {

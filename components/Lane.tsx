@@ -60,6 +60,36 @@ export const Lane: React.FC<LaneProps> = ({ config, active, onTrigger, onRelease
                     </span>
                 </div>
             );
+        } else if (theme.id === 'queen') {
+             // "QUEEN PROTOCOL" - GLOWING KEYBOARD KEY STYLE
+            return (
+                <div className={`absolute bottom-3 left-1 right-1 h-16 flex items-end justify-center transition-all duration-75`}>
+                    <div className={`
+                        relative w-full rounded-md border-b-4 transition-all duration-75 flex items-center justify-center overflow-hidden
+                        ${active 
+                            ? 'h-14 translate-y-1 border-pink-400 bg-pink-600 shadow-[0_0_30px_rgba(236,72,153,1)]' 
+                            : 'h-14 border-pink-900 bg-slate-900 shadow-[0_0_15px_rgba(236,72,153,0.3)]'}
+                    `}>
+                        {/* Keycap Surface Texture */}
+                        <div className={`absolute inset-0 bg-gradient-to-b ${active ? 'from-pink-400 to-pink-600' : 'from-slate-800 to-slate-900'}`}></div>
+                        
+                        {/* Inner Backlight */}
+                        <div className={`
+                            absolute inset-2 rounded blur-sm transition-opacity duration-75
+                            ${active ? 'bg-white opacity-40' : 'bg-pink-500 opacity-10'}
+                        `}></div>
+
+                        <span className={`relative z-10 font-mono font-bold text-xl ${active ? 'text-white' : 'text-pink-500'} drop-shadow-md`}>
+                            {config.label === 'SPC' ? 'SPACE' : config.label}
+                        </span>
+                        
+                        {/* Top Highlight */}
+                        <div className="absolute top-0 inset-x-0 h-1/2 bg-white/5 rounded-t-md"></div>
+                    </div>
+                    {/* Underglow Reflection */}
+                    {active && <div className="absolute -bottom-2 w-full h-2 bg-pink-500 blur-md opacity-50"></div>}
+                </div>
+            );
         } else {
             // "NEON CORE" - CLASSIC LINE/GLOW STYLE
             return (
