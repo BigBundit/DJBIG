@@ -87,5 +87,13 @@ export const GAME_THEMES: Theme[] = [
         unlockDescription: 'Unlocked via Customization',
         noteShape: 'rect',
         receptorStyle: 'line'
+    },
+    {
+        id: 'titan',
+        name: 'TITAN CONSTRUCT',
+        description: 'Heavy industrial interface with reinforced inputs.',
+        unlockDescription: 'Unlocked via Customization',
+        noteShape: 'hex',
+        receptorStyle: 'bracket'
     }
 ];

@@ -85,11 +85,12 @@ export interface AudioSettings {
 
 export interface LayoutSettings {
     lanePosition: 'left' | 'center' | 'right';
+    enableMenuBackground?: boolean;
 }
 
 // --- THEME SYSTEM TYPES ---
 
-export type ThemeId = 'neon' | 'ignore';
+export type ThemeId = 'neon' | 'ignore' | 'titan';
 
 export interface Theme {
     id: ThemeId;

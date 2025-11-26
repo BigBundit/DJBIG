@@ -117,6 +117,13 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
         });
     };
 
+    const handleMenuBgToggle = () => {
+        onLayoutSettingsChange({
+            ...layoutSettings,
+            enableMenuBackground: !layoutSettings.enableMenuBackground
+        });
+    };
+
     const activeConfig = getBaseConfig(activeMode);
     const currentBoundKeys = localMappings[activeMode];
 
@@ -141,6 +148,20 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                 className={`w-16 h-8 rounded-full transition-all relative border ${isFullscreen ? 'bg-cyan-600 border-cyan-400' : 'bg-slate-900 border-slate-600'}`}
                             >
                                 <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${isFullscreen ? 'right-1' : 'left-1'}`}></div>
+                            </button>
+                         </div>
+
+                         {/* Menu Background Toggle */}
+                         <div className="flex justify-between items-center">
+                            <div>
+                                <div className="text-slate-200 font-mono font-bold">MENU BACKGROUND</div>
+                                <div className="text-xs text-slate-500">Show background video in menus</div>
+                            </div>
+                            <button
+                                onClick={handleMenuBgToggle}
+                                className={`w-16 h-8 rounded-full transition-all relative border ${layoutSettings.enableMenuBackground ? 'bg-cyan-600 border-cyan-400' : 'bg-slate-900 border-slate-600'}`}
+                            >
+                                <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${layoutSettings.enableMenuBackground ? 'right-1' : 'left-1'}`}></div>
                             </button>
                          </div>
 

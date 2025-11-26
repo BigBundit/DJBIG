@@ -44,7 +44,8 @@ const DEFAULT_STATS: PlayerStats = {
 };
 
 const DEFAULT_LAYOUT: LayoutSettings = {
-    lanePosition: 'left'
+    lanePosition: 'left',
+    enableMenuBackground: true
 };
 
 const App: React.FC = () => {
@@ -102,7 +103,7 @@ const App: React.FC = () => {
 
   // Theme & Progress System
   const [currentThemeId, setCurrentThemeId] = useState<ThemeId>('ignore');
-  const [unlockedThemes, setUnlockedThemes] = useState<Set<ThemeId>>(new Set(['neon', 'ignore']));
+  const [unlockedThemes, setUnlockedThemes] = useState<Set<ThemeId>>(new Set(['neon', 'ignore', 'titan']));
   const [playerStats, setPlayerStats] = useState<PlayerStats>(DEFAULT_STATS);
 
   // Ref to hold audio settings for access within game loop/closures without dependency issues
@@ -130,12 +131,12 @@ const App: React.FC = () => {
           try { setPlayerStats(JSON.parse(storedStats)); } catch (e) { console.error("Failed to load stats", e); }
       }
 
-      // Themes - No longer needed as we fixed them, but good to keep structure
-      setUnlockedThemes(new Set(['neon', 'ignore']));
+      // Themes
+      setUnlockedThemes(new Set(['neon', 'ignore', 'titan']));
 
       // Active Theme
       const storedActiveTheme = localStorage.getItem('djbig_active_theme');
-      if (storedActiveTheme === 'neon' || storedActiveTheme === 'ignore') {
+      if (storedActiveTheme === 'neon' || storedActiveTheme === 'ignore' || storedActiveTheme === 'titan') {
           setCurrentThemeId(storedActiveTheme);
       } else {
           setCurrentThemeId('ignore');
@@ -180,11 +181,6 @@ const App: React.FC = () => {
       
       setPlayerStats(newStats);
       localStorage.setItem('djbig_player_stats', JSON.stringify(newStats));
-      
-      // Currently all themes are unlocked or default, but structure remains
-      const unlocked = new Set(unlockedThemes);
-      unlocked.add('ignore');
-      setUnlockedThemes(unlocked);
   };
 
   // Derived Config with Dynamic Keys
@@ -1011,9 +1007,10 @@ const App: React.FC = () => {
         {/* JUDGE LINE (Dynamic per theme) */}
         {currentThemeId === 'ignore' ? (
              <div className="absolute bottom-24 left-0 w-full h-1 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.9)] z-10 opacity-80 pointer-events-none"></div>
+        ) : currentThemeId === 'titan' ? (
+             <div className="absolute bottom-20 left-0 w-full h-[2px] bg-amber-500/80 shadow-[0_0_10px_rgba(245,158,11,0.5)] z-10 pointer-events-none"></div>
         ) : (
-            // Neon Theme doesn't use a strict red line across notes, uses glow in Lane component, but we can add a subtle one
-            <div className="absolute bottom-20 left-0 w-full h-px bg-white/20 pointer-events-none"></div>
+             <div className="absolute bottom-20 left-0 w-full h-px bg-white/20 pointer-events-none"></div>
         )}
 
         {/* Hit Effects */}
@@ -1074,6 +1071,128 @@ const App: React.FC = () => {
     </div>
   );
 
+  // RENDER THEME FRAMES
+  const renderGameFrame = () => {
+    // 1. HANDHELD (IGNORE PROTOCOL)
+    if (currentThemeId === 'ignore') {
+        return (
+            <div className={`
+                relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
+                overflow-hidden border-x-[4px] border-slate-300 bg-slate-900 shadow-[0_0_60px_rgba(0,0,0,0.9)]
+                flex flex-col
+            `}>
+                <div className="relative flex-1 flex w-full">
+                    {/* LEFT DECORATION */}
+                    <div className="w-4 bg-slate-800 border-r border-slate-700 relative">
+                            <div className="absolute bottom-20 left-1 w-2 h-32 bg-red-900/50 rounded-full animate-pulse"></div>
+                    </div>
+
+                    {/* GAMEPLAY AREA */}
+                    {renderLanes()}
+
+                    {/* RIGHT SIDEBAR: VERTICAL GAUGE */}
+                    <div className="w-6 bg-slate-900 border-l border-slate-700 relative flex flex-col justify-end p-0.5">
+                        <div className="absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text" style={{writingMode: 'vertical-rl'}}>GROOVE</div>
+                        <div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700">
+                                <div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div>
+                        </div>
+                        <div className={`mt-1 w-full h-1 ${health > 90 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`}></div>
+                    </div>
+                </div>
+
+                {/* BOTTOM DASHBOARD */}
+                <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner">
+                        <div className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left">
+                            <div className="text-[8px] text-slate-400 font-bold">SPEED</div>
+                            <div className="text-sm font-display text-white">{speedMod.toFixed(2)}</div>
+                        </div>
+                        <div className="flex flex-col items-center bg-black px-3 py-1 rounded border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)]">
+                            <div className="text-[8px] text-red-900 font-bold tracking-widest w-full text-center">SCORE</div>
+                            <div className="font-mono text-2xl text-red-600 font-bold tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">
+                                {score.toString().padStart(7, '0')}
+                            </div>
+                        </div>
+                        <div className="flex space-x-1 scale-75 origin-right">
+                            <div className="w-8 h-8 bg-slate-300 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)]"></div>
+                            <div className="w-8 h-8 bg-slate-300 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)]"></div>
+                        </div>
+                </div>
+            </div>
+        );
+    } 
+    // 2. INDUSTRIAL (TITAN CONSTRUCT)
+    else if (currentThemeId === 'titan') {
+        return (
+             <div className={`
+                relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
+                overflow-hidden bg-slate-900 shadow-[0_0_60px_rgba(245,158,11,0.1)]
+                flex flex-col border-x-8 border-slate-800
+            `}>
+                {/* Top Industrial Bar */}
+                <div className="w-full h-16 bg-slate-800 border-b-2 border-amber-600/50 flex items-center justify-between px-4 relative">
+                     {/* Caution Stripes */}
+                     <div className="absolute bottom-0 left-0 w-full h-1 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#f59e0b_10px,#f59e0b_20px)] opacity-50"></div>
+                     
+                     <div className="flex flex-col">
+                        <div className="text-[10px] text-amber-500 font-bold tracking-widest">SYSTEM INTEGRITY</div>
+                        <div className="w-32 h-3 bg-slate-950 border border-slate-600 mt-1">
+                            <div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-amber-500'}`} style={{width: `${health}%`}}></div>
+                        </div>
+                     </div>
+                     <div className="text-right">
+                        <div className="text-[10px] text-amber-500 font-bold tracking-widest">SCORE OUTPUT</div>
+                        <div className="text-2xl font-mono font-bold text-amber-100">{score.toString().padStart(7, '0')}</div>
+                     </div>
+                </div>
+
+                {/* Gameplay Area */}
+                <div className="flex-1 relative bg-slate-900 border-l border-r border-slate-800">
+                    {/* Mesh Pattern BG */}
+                    <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle, #78716c 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
+                    {renderLanes()}
+                </div>
+                
+                {/* Bottom Mechanical Lip */}
+                <div className="h-4 bg-slate-800 border-t-2 border-amber-600/30 flex justify-center">
+                    <div className="w-1/3 h-full bg-slate-700 rounded-b-lg"></div>
+                </div>
+            </div>
+        );
+    }
+    // 3. CLASSIC (NEON CORE)
+    else {
+        return (
+            <div className={`
+                relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
+                overflow-hidden border-x-[4px] border-slate-800 bg-black/80 shadow-[0_0_60px_rgba(6,182,212,0.2)]
+                flex flex-col
+            `}>
+                {/* Top Stats Bar for Classic View */}
+                <div className="w-full flex justify-between items-start p-4 bg-gradient-to-b from-slate-900 to-transparent z-30 pointer-events-none border-b border-white/10">
+                        <div className="w-1/3">
+                        <div className="text-xs text-cyan-400 font-bold">INTEGRITY</div>
+                        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
+                            <div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-cyan-500'}`} style={{width: `${health}%`}}></div>
+                        </div>
+                        </div>
+                        <div className="w-1/3 text-right">
+                        <div className="text-xs text-cyan-400 font-bold">SCORE</div>
+                        <div className="text-4xl font-mono text-white glow-text">{score.toString().padStart(7, '0')}</div>
+                        </div>
+                </div>
+
+                {/* Gameplay Area - Full Height */}
+                <div className="flex-1 relative bg-black/50 backdrop-blur-sm">
+                    {renderLanes()}
+                </div>
+                
+                {/* Simple Bottom Line */}
+                <div className="h-2 bg-gradient-to-r from-cyan-500 to-blue-500 w-full shadow-[0_0_20px_rgba(6,182,212,0.5)]"></div>
+            </div>
+        );
+    }
+  };
+
   return (
     <div className={`relative w-full h-screen bg-black overflow-hidden text-slate-100 select-none ${isShaking ? 'animate-[shake_0.2s_ease-in-out]' : ''}`}>
       
@@ -1111,14 +1230,16 @@ const App: React.FC = () => {
             </>
         ) : (
             <div className="w-full h-full relative overflow-hidden bg-black">
-                 <video
-                    src="background.mp4" 
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                    className="absolute inset-0 w-full h-full object-cover opacity-100"
-                 />
+                 {layoutSettings.enableMenuBackground && (
+                    <video
+                        src="background.mp4" 
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="absolute inset-0 w-full h-full object-cover opacity-100"
+                    />
+                 )}
                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]"></div>
             </div>
         )}
@@ -1342,91 +1463,17 @@ const App: React.FC = () => {
             layoutSettings.lanePosition === 'right' ? 'justify-end' : 'justify-start'
         }`}>
             
-            {/* THEME SWITCH: IGNORE PROTOCOL (Handheld) VS NEON CORE (Classic) */}
-            
-            {currentThemeId === 'ignore' ? (
-                // --- HANDHELD DEVICE LAYOUT ---
-                <div className={`
-                    relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
-                    overflow-hidden border-x-[4px] border-slate-300 bg-slate-900 shadow-[0_0_60px_rgba(0,0,0,0.9)]
-                    flex flex-col
-                `}>
-                    <div className="relative flex-1 flex w-full">
-                        {/* LEFT DECORATION */}
-                        <div className="w-4 bg-slate-800 border-r border-slate-700 relative">
-                             <div className="absolute bottom-20 left-1 w-2 h-32 bg-red-900/50 rounded-full animate-pulse"></div>
-                        </div>
+            {/* RENDER THE ACTIVE THEME FRAME */}
+            {renderGameFrame()}
 
-                        {/* GAMEPLAY AREA */}
-                        {renderLanes()}
-
-                        {/* RIGHT SIDEBAR: VERTICAL GAUGE */}
-                        <div className="w-6 bg-slate-900 border-l border-slate-700 relative flex flex-col justify-end p-0.5">
-                            <div className="absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text" style={{writingMode: 'vertical-rl'}}>GROOVE</div>
-                            <div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700">
-                                 <div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div>
-                            </div>
-                            <div className={`mt-1 w-full h-1 ${health > 90 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`}></div>
-                        </div>
-                    </div>
-
-                    {/* BOTTOM DASHBOARD */}
-                    <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner">
-                         <div className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left">
-                             <div className="text-[8px] text-slate-400 font-bold">SPEED</div>
-                             <div className="text-sm font-display text-white">{speedMod.toFixed(2)}</div>
-                         </div>
-                         <div className="flex flex-col items-center bg-black px-3 py-1 rounded border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)]">
-                             <div className="text-[8px] text-red-900 font-bold tracking-widest w-full text-center">SCORE</div>
-                             <div className="font-mono text-2xl text-red-600 font-bold tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">
-                                 {score.toString().padStart(7, '0')}
-                             </div>
-                         </div>
-                         <div className="flex space-x-1 scale-75 origin-right">
-                             <div className="w-8 h-8 bg-slate-300 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)]"></div>
-                             <div className="w-8 h-8 bg-slate-300 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)]"></div>
-                         </div>
-                    </div>
-                </div>
-            ) : (
-                // --- NEON CORE (CLASSIC LAYOUT) ---
-                <div className={`
-                    relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
-                    overflow-hidden border-x-[4px] border-slate-800 bg-black/80 shadow-[0_0_60px_rgba(6,182,212,0.2)]
-                    flex flex-col
-                `}>
-                    {/* Top Stats Bar for Classic View */}
-                    <div className="w-full flex justify-between items-start p-4 bg-gradient-to-b from-slate-900 to-transparent z-30 pointer-events-none border-b border-white/10">
-                         <div className="w-1/3">
-                            <div className="text-xs text-cyan-400 font-bold">INTEGRITY</div>
-                            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
-                                <div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-cyan-500'}`} style={{width: `${health}%`}}></div>
-                            </div>
-                         </div>
-                         <div className="w-1/3 text-right">
-                            <div className="text-xs text-cyan-400 font-bold">SCORE</div>
-                            <div className="text-4xl font-mono text-white glow-text">{score.toString().padStart(7, '0')}</div>
-                         </div>
-                    </div>
-
-                    {/* Gameplay Area - Full Height */}
-                    <div className="flex-1 relative bg-black/50 backdrop-blur-sm">
-                        {renderLanes()}
-                    </div>
-                    
-                    {/* Simple Bottom Line */}
-                    <div className="h-2 bg-gradient-to-r from-cyan-500 to-blue-500 w-full shadow-[0_0_20px_rgba(6,182,212,0.5)]"></div>
-                </div>
-            )}
-
-            {/* DECORATIVE TEXT (Hidden in Handheld mode usually, but added back conditionally) */}
+            {/* DECORATIVE TEXT */}
             <div className={`
                 absolute inset-0 z-10 hidden md:flex flex-col justify-end p-12 pointer-events-none
                 ${layoutSettings.lanePosition === 'right' ? 'items-start text-left' : 'items-end text-right'}
             `}>
                 <div className="pointer-events-none">
                     <h2 className="text-6xl font-display font-bold text-white/40 tracking-widest drop-shadow-md">
-                        {currentThemeId === 'ignore' ? 'IGNORE PROTOCOL' : 'NEON CORE'}
+                        {currentThemeId === 'ignore' ? 'IGNORE PROTOCOL' : currentThemeId === 'titan' ? 'TITAN CONSTRUCT' : 'NEON CORE'}
                     </h2>
                     <div className="text-cyan-500/80 font-mono mt-2 bg-black/60 inline-block px-4 py-1 rounded backdrop-blur-md border border-cyan-500/30">
                         SYSTEM LINKED: {localFileName ? localFileName : 'LOCAL_FILE'} // MODE: {keyMode}K

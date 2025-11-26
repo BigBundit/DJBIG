@@ -42,6 +42,24 @@ export const Lane: React.FC<LaneProps> = ({ config, active, onTrigger, onRelease
                     <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/5 rounded-t-lg"></div>
                 </div>
             );
+        } else if (theme.id === 'titan') {
+            // "TITAN CONSTRUCT" - INDUSTRIAL BRACKET STYLE
+            return (
+                <div className={`absolute bottom-4 left-1 right-1 h-16 flex items-end justify-center transition-all duration-75 ${active ? 'scale-95' : ''}`}>
+                    {/* Left Bracket */}
+                    <div className={`absolute left-0 bottom-0 h-full w-2 border-l-4 border-b-4 border-t-2 ${active ? `border-${config.color.base}-500` : 'border-slate-600'} rounded-bl`}></div>
+                    
+                    {/* Right Bracket */}
+                    <div className={`absolute right-0 bottom-0 h-full w-2 border-r-4 border-b-4 border-t-2 ${active ? `border-${config.color.base}-500` : 'border-slate-600'} rounded-br`}></div>
+                    
+                    {/* Center Glow */}
+                    <div className={`absolute bottom-1 left-2 right-2 h-2 ${active ? `bg-${config.color.base}-500 shadow-[0_0_15px_currentColor]` : 'bg-slate-800'}`}></div>
+
+                    <span className={`mb-4 font-display font-bold text-xl ${active ? `text-${config.color.base}-400` : 'text-slate-600'}`}>
+                        {config.label === 'SPC' ? 'SPACE' : config.label}
+                    </span>
+                </div>
+            );
         } else {
             // "NEON CORE" - CLASSIC LINE/GLOW STYLE
             return (
