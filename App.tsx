@@ -1103,7 +1103,7 @@ const App: React.FC = () => {
   const renderLanes = () => (
     <div 
         ref={laneContainerRef}
-        className="relative flex-1 bg-black/80 flex perspective-1000 outline-none overflow-hidden h-full"
+        className="relative flex-1 bg-black/10 backdrop-blur-sm flex perspective-1000 outline-none overflow-hidden h-full"
         onTouchStart={handleTouch}
         onTouchMove={handleTouch}
         onTouchEnd={handleTouch}
@@ -1201,12 +1201,12 @@ const App: React.FC = () => {
         return (
             <div className={`
                 relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
-                overflow-hidden border-x-[4px] border-slate-300 bg-slate-900 shadow-[0_0_60px_rgba(0,0,0,0.9)]
+                overflow-hidden border-x-[4px] border-slate-300 bg-slate-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(0,0,0,0.9)]
                 flex flex-col
             `}>
                 <div className="relative flex-1 flex w-full">
                     {/* LEFT DECORATION */}
-                    <div className="w-4 bg-slate-800 border-r border-slate-700 relative">
+                    <div className="w-4 bg-slate-800/80 border-r border-slate-700 relative">
                             <div className="absolute bottom-20 left-1 w-2 h-32 bg-red-900/50 rounded-full animate-pulse"></div>
                     </div>
 
@@ -1214,7 +1214,7 @@ const App: React.FC = () => {
                     {renderLanes()}
 
                     {/* RIGHT SIDEBAR: VERTICAL GAUGE */}
-                    <div className="w-6 bg-slate-900 border-l border-slate-700 relative flex flex-col justify-end p-0.5">
+                    <div className="w-6 bg-slate-900/80 border-l border-slate-700 relative flex flex-col justify-end p-0.5">
                         <div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`}>{t.GROOVE}</div>
                         <div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700">
                                 <div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div>
@@ -1248,11 +1248,11 @@ const App: React.FC = () => {
         return (
              <div className={`
                 relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
-                overflow-hidden bg-slate-900 shadow-[0_0_60px_rgba(245,158,11,0.1)]
-                flex flex-col border-x-8 border-slate-800
+                overflow-hidden bg-slate-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(245,158,11,0.1)]
+                flex flex-col border-x-8 border-slate-800/50
             `}>
                 {/* Top Industrial Bar */}
-                <div className="w-full h-16 bg-slate-800 border-b-2 border-amber-600/50 flex items-center justify-between px-4 relative">
+                <div className="w-full h-16 bg-slate-800/80 border-b-2 border-amber-600/50 flex items-center justify-between px-4 relative">
                      {/* Caution Stripes */}
                      <div className="absolute bottom-0 left-0 w-full h-1 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#f59e0b_10px,#f59e0b_20px)] opacity-50"></div>
                      
@@ -1269,15 +1269,15 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Gameplay Area */}
-                <div className="flex-1 relative bg-slate-900 border-l border-r border-slate-800">
+                <div className="flex-1 relative bg-slate-900/10 border-l border-r border-slate-800">
                     {/* Mesh Pattern BG */}
                     <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle, #78716c 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
                     {renderLanes()}
                 </div>
                 
                 {/* Bottom Mechanical Lip */}
-                <div className="h-4 bg-slate-800 border-t-2 border-amber-600/30 flex justify-center">
-                    <div className="w-1/3 h-full bg-slate-700 rounded-b-lg"></div>
+                <div className="h-4 bg-slate-800/80 border-t-2 border-amber-600/30 flex justify-center">
+                    <div className="w-1/3 h-full bg-slate-700/80 rounded-b-lg"></div>
                 </div>
             </div>
         );
@@ -1287,11 +1287,11 @@ const App: React.FC = () => {
         return (
             <div className={`
                 relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
-                overflow-hidden bg-gradient-to-b from-black via-purple-950 to-pink-900 shadow-[0_0_60px_rgba(236,72,153,0.3)]
-                flex flex-col border-x-4 border-pink-800
+                overflow-hidden bg-gradient-to-b from-black/50 via-purple-950/40 to-pink-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(236,72,153,0.3)]
+                flex flex-col border-x-4 border-pink-800/50
             `}>
                 {/* Top Royal Stats */}
-                <div className="w-full py-4 px-6 flex justify-between items-center bg-black/60 backdrop-blur-md border-b border-pink-800">
+                <div className="w-full py-4 px-6 flex justify-between items-center bg-black/40 backdrop-blur-md border-b border-pink-800">
                     <div className="flex flex-col">
                         <div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.GRACE}</div>
                          <div className="w-32 h-2 bg-purple-950 border border-purple-700 rounded-full mt-1 overflow-hidden">
@@ -1309,17 +1309,17 @@ const App: React.FC = () => {
                 {/* Gameplay Area with Elegant Side Bars */}
                 <div className="flex-1 relative flex">
                      {/* Left Pillar */}
-                    <div className="w-2 h-full bg-gradient-to-b from-purple-900 via-pink-900 to-purple-900"></div>
+                    <div className="w-2 h-full bg-gradient-to-b from-purple-900/50 via-pink-900/50 to-purple-900/50"></div>
                     
                     {/* Main Lane */}
-                    <div className="flex-1 relative bg-black/40">
+                    <div className="flex-1 relative bg-black/10">
                          {/* Subtle Diamond Pattern BG */}
-                        <div className="absolute inset-0 opacity-20" style={{backgroundImage: 'linear-gradient(135deg, #be185d 25%, transparent 25%), linear-gradient(225deg, #be185d 25%, transparent 25%), linear-gradient(45deg, #be185d 25%, transparent 25%), linear-gradient(315deg, #be185d 25%, transparent 25%)', backgroundPosition: '10px 0, 10px 0, 0 0, 0 0', backgroundSize: '20px 20px', backgroundRepeat: 'repeat'}}></div>
+                        <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(135deg, #be185d 25%, transparent 25%), linear-gradient(225deg, #be185d 25%, transparent 25%), linear-gradient(45deg, #be185d 25%, transparent 25%), linear-gradient(315deg, #be185d 25%, transparent 25%)', backgroundPosition: '10px 0, 10px 0, 0 0, 0 0', backgroundSize: '20px 20px', backgroundRepeat: 'repeat'}}></div>
                         {renderLanes()}
                     </div>
 
                     {/* Right Pillar */}
-                    <div className="w-2 h-full bg-gradient-to-b from-purple-900 via-pink-900 to-purple-900"></div>
+                    <div className="w-2 h-full bg-gradient-to-b from-purple-900/50 via-pink-900/50 to-purple-900/50"></div>
                 </div>
 
                  {/* Bottom Decoration */}
@@ -1332,11 +1332,11 @@ const App: React.FC = () => {
         return (
             <div className={`
                 relative h-full md:max-w-lg w-full flex-shrink-0 z-20 
-                overflow-hidden border-x-[4px] border-slate-800 bg-black/80 shadow-[0_0_60px_rgba(6,182,212,0.2)]
+                overflow-hidden border-x-[4px] border-slate-800/50 bg-black/30 backdrop-blur-md shadow-[0_0_60px_rgba(6,182,212,0.2)]
                 flex flex-col
             `}>
                 {/* Top Stats Bar for Classic View */}
-                <div className="w-full flex justify-between items-start p-4 bg-gradient-to-b from-slate-900 to-transparent z-30 pointer-events-none border-b border-white/10">
+                <div className="w-full flex justify-between items-start p-4 bg-gradient-to-b from-slate-900/80 to-transparent z-30 pointer-events-none border-b border-white/10">
                         <div className="w-1/3">
                         <div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.INTEGRITY}</div>
                         <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
@@ -1350,7 +1350,7 @@ const App: React.FC = () => {
                 </div>
 
                 {/* Gameplay Area - Full Height */}
-                <div className="flex-1 relative bg-black/50 backdrop-blur-sm">
+                <div className="flex-1 relative bg-black/10 backdrop-blur-sm">
                     {renderLanes()}
                 </div>
                 
@@ -1374,9 +1374,9 @@ const App: React.FC = () => {
                         <img 
                             src="/bg01.png" 
                             alt="concert bg"
-                            className="w-full h-full object-cover opacity-80 animate-camera-drift"
+                            className="w-full h-full object-cover opacity-100 animate-camera-drift"
                         />
-                        <div className="absolute inset-0 bg-slate-950/40"></div>
+                        <div className="absolute inset-0 bg-slate-950/20"></div>
                      </div>
                 ) : (
                     <video
