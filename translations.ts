@@ -58,9 +58,9 @@ export const TRANSLATIONS = {
         PRESS_KEY: "PRESS KEY",
 
         // Pause & End
-        PAUSED: "SYSTEM PAUSED",
+        PAUSED: "GAME PAUSED",
         RESUME: "RESUME MISSION",
-        SYSTEM_SETTING: "SYSTEM SETTINGS",
+        SYSTEM_SETTING: "GAME SETTINGS",
         ABORT: "ABORT MISSION",
         MISSION_RESULTS: "MISSION RESULTS",
         TOTAL_SCORE: "TOTAL SCORE",
@@ -146,9 +146,9 @@ export const TRANSLATIONS = {
         PRESS_KEY: "กดปุ่ม",
 
         // Pause & End
-        PAUSED: "หยุดชั่วคราว",
+        PAUSED: "เกมหยุดชั่วคราว",
         RESUME: "ดำเนินการต่อ",
-        SYSTEM_SETTING: "ตั้งค่าระบบ",
+        SYSTEM_SETTING: "ตั้งค่าเกม",
         ABORT: "ยกเลิกภารกิจ",
         MISSION_RESULTS: "ผลลัพธ์ภารกิจ",
         TOTAL_SCORE: "คะแนนรวม",

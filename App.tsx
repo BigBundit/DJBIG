@@ -308,20 +308,16 @@ const App: React.FC = () => {
       }
   };
 
-  const handlePlayDemo = async () => {
+  const loadDemoTrack = async () => {
     playUiSound('select');
     const ctx = initAudio();
     setIsAnalyzing(true);
-    setSongList([]);
     setLocalFileName("DEMO_TRACK");
     setMediaType('video');
     setSoundProfile('rock');
-    
-    // We do NOT force Level 10 anymore, let user decide difficulty
-    // setLevel(10); 
-    
+    setAnalyzedNotes(null); // Reset previous
+
     try {
-        // Fetch the local video file
         const response = await fetch('demoplay.mp4');
         if (!response.ok) throw new Error("Demo file not found");
         
@@ -336,25 +332,10 @@ const App: React.FC = () => {
         audioBufferRef.current = audioBuffer;
         audioDurationRef.current = audioBuffer.duration;
         
-        // ANALYZE AT SELECTED LEVEL
+        // Analyze
         const notes = await analyzeAudioAndGenerateNotes(audioBuffer, level, keyMode);
         setAnalyzedNotes(notes);
         setIsAnalyzing(false);
-        
-        // Auto start logic
-        setStartCountdown(3);
-        let count = 3;
-        const timer = setInterval(() => {
-            count--;
-            if (count > 0) {
-                setStartCountdown(count);
-            } else {
-                clearInterval(timer);
-                setStartCountdown(null);
-                // PASS NOTES DIRECTLY to avoid closure staleness
-                startGame(false, notes); 
-            }
-        }, 1000);
         
     } catch (e) {
         console.error("Failed to load demo", e);
@@ -403,9 +384,32 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSingleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSingleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (file) handleFileSelect(file);
+      if (file) {
+          // Add to song list as a "Single Loaded Track"
+          const isVideo = file.type.startsWith('video') || !!file.name.match(/\.(mp4|webm|ogg|mov|m4v)$/i);
+          let thumb: string | null = null;
+          
+          if (isVideo) {
+             try {
+                 thumb = await generateVideoThumbnail(file);
+             } catch (err) {
+                 console.warn("Failed to gen thumb", err);
+             }
+          }
+
+          const newSong: SongMetadata = {
+              id: `single-${Date.now()}`,
+              file: file,
+              name: file.name,
+              thumbnailUrl: thumb,
+              type: isVideo ? 'video' : 'audio'
+          };
+          
+          setSongList(prev => [...prev, newSong]); // Append to list
+          handleFileSelect(file);
+      }
   };
 
   const handleFolderSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -413,7 +417,8 @@ const App: React.FC = () => {
       if (!files || files.length === 0) return;
 
       setIsLoadingFolder(true);
-      setSongList([]);
+      // We append folder contents, not replace
+      // setSongList([]); 
 
       const validExtensions = ['.mp4', '.mp3', '.m4a', '.wav', '.ogg', '.m4v', '.webm'];
       const loadedSongs: SongMetadata[] = [];
@@ -437,7 +442,7 @@ const App: React.FC = () => {
               }
 
               loadedSongs.push({
-                  id: `${i}-${file.name}`,
+                  id: `${Date.now()}-${i}-${file.name}`,
                   file: file,
                   name: file.name,
                   thumbnailUrl: thumb,
@@ -446,7 +451,7 @@ const App: React.FC = () => {
           }
       }
 
-      setSongList(loadedSongs);
+      setSongList(prev => [...prev, ...loadedSongs]);
       setIsLoadingFolder(false);
   };
 
@@ -950,7 +955,7 @@ const App: React.FC = () => {
     if (status === GameStatus.MENU || status === GameStatus.TITLE) {
         // Just play sound if pressing keys in menu for fun
         const laneIndex = activeLaneConfig.findIndex(l => l.key === e.key.toLowerCase());
-        if (laneIndex !== -1 && audioCtxRef.current) {
+        if (laneIndex !== -1 && activeLaneConfig.length > 0 && audioCtxRef.current) {
             playHitSound(laneIndex);
         }
         return;
@@ -1520,128 +1525,265 @@ const App: React.FC = () => {
       )}
 
       {status === GameStatus.MENU && !startCountdown && (
-        <div className="relative z-30 h-full flex flex-col items-center justify-center animate-fade-in px-4 overflow-y-auto py-8">
+        <div className="relative z-30 h-full flex flex-col items-center justify-start lg:justify-center animate-fade-in px-4 pt-24 pb-8 lg:py-8 overflow-y-auto">
+          {/* Back Button */}
           <button 
              onClick={() => { setStatus(GameStatus.TITLE); playUiSound('select'); }}
-             className="absolute top-4 left-4 p-2 text-slate-400 hover:text-white flex items-center space-x-2 transition-colors"
+             className="absolute top-4 left-4 p-2 text-slate-400 hover:text-white flex items-center space-x-2 transition-colors z-50 bg-black/50 rounded-full active:scale-95"
           >
-             <span className="text-2xl">←</span> <span className={`font-bold ${fontClass}`}>{t.BACK}</span>
+             <span className="text-2xl">←</span> <span className={`font-bold hidden md:inline ${fontClass}`}>{t.BACK}</span>
           </button>
 
            <button 
              onClick={() => setShowThemeMenu(true)}
-             className="absolute top-4 right-16 p-2 text-slate-400 hover:text-purple-400 transition-all duration-300 flex items-center space-x-2"
+             className="absolute top-4 right-16 p-2 text-slate-400 hover:text-purple-400 transition-all duration-300 flex items-center space-x-2 z-50 bg-black/50 rounded-full px-4 active:scale-95"
           >
              <span className={`font-bold text-sm hidden md:inline ${fontClass}`}>{t.CUSTOMIZE}</span>
-             <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M12,22c4.97,0,9-4.03,9-9c0-4.97-4.03-9-9-9c-0.93,0-1.83,0.14-2.68,0.4c-0.61,0.18-0.95,0.83-0.77,1.44 c0.12,0.41,0.5,0.69,0.92,0.69c0.17,0,0.34-0.05,0.5-0.1C10.59,6.17,11.27,6,12,6c3.31,0,6,2.69,6,6c0,3.31-2.69,6-6,6 c-3.31,0-6-2.69-6-6c0-1.07,0.28-2.07,0.77-2.94C7.14,8.42,6.92,7.63,6.29,7.36C5.7,7.11,5.01,7.27,4.6,7.76 C3.57,9,2.98,10.45,3.01,12.04C3.06,17.26,7.5,21.75,12.72,21.99C17.94,22.23,22,17.88,22,12.65V12c0-0.55-0.45-1-1-1s-1,0.45-1,1 v0.65C20,16.89,16.33,20.08,12,20.08v0.01c-3.15,0-5.88-1.74-7.24-4.29l0,0l2.7-2.7c0.39-0.39,0.39-1.02,0-1.41 s-1.02-0.39-1.41,0l-2.7,2.7C2.45,13.43,2,12.74,2,12c0-0.55-0.45-1-1-1s-1,0.45-1,1c0,0.99,0.16,1.93,0.45,2.81l2.7-2.7 c0.39-0.39,1.02-0.39,1.41,0s0.39,1.02,0,1.41l-2.7,2.7C4.16,19.82,7.73,22,12,22z"/></svg>
+             <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12,22c4.97,0,9-4.03,9-9c0-4.97-4.03-9-9-9c-0.93,0-1.83,0.14-2.68,0.4c-0.61,0.18-0.95,0.83-0.77,1.44 c0.12,0.41,0.5,0.69,0.92,0.69c0.17,0,0.34-0.05,0.5-0.1C10.59,6.17,11.27,6,12,6c3.31,0,6,2.69,6,6c0,3.31-2.69,6-6,6 c-3.31,0-6-2.69-6-6c0-1.07,0.28-2.07,0.77-2.94C7.14,8.42,6.92,7.63,6.29,7.36C5.7,7.11,5.01,7.27,4.6,7.76 C3.57,9,2.98,10.45,3.01,12.04C3.06,17.26,7.5,21.75,12.72,21.99C17.94,22.23,22,17.88,22,12.65V12c0-0.55-0.45-1-1-1s-1,0.45-1,1 v0.65C20,16.89,16.33,20.08,12,20.08v0.01c-3.15,0-5.88-1.74-7.24-4.29l0,0l2.7-2.7c0.39-0.39,0.39-1.02,0-1.41 s-1.02-0.39-1.41,0l-2.7,2.7C2.45,13.43,2,12.74,2,12c0-0.55-0.45-1-1-1s-1,0.45-1,1c0,0.99,0.16,1.93,0.45,2.81l2.7-2.7 c0.39-0.39,1.02-0.39,1.41,0s0.39,1.02,0,1.41l-2.7,2.7C4.16,19.82,7.73,22,12,22z"/></svg>
           </button>
 
           <button 
              onClick={() => setShowKeyConfig(true)}
-             className="absolute top-4 right-4 p-2 text-slate-400 hover:text-cyan-400 hover:rotate-90 transition-all duration-500"
+             className="absolute top-4 right-4 p-2 text-slate-400 hover:text-cyan-400 hover:rotate-90 transition-all duration-500 z-50 bg-black/50 rounded-full active:scale-95"
           >
-             <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12-0.61l1.92,3.32c0.12-0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+             <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12-0.61l1.92,3.32c0.12-0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
           </button>
-
-          <h1 className="text-4xl md:text-5xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500 tracking-tighter filter drop-shadow-[0_0_25px_rgba(6,182,212,0.6)] mb-4 text-center">
-            SETUP <span className="text-cyan-400">PHASE</span>
-          </h1>
           
-          <div className="w-full max-w-3xl min-h-[600px] space-y-8 py-12 px-12 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl relative transition-all duration-50 bg-black/80 flex flex-col justify-center">
-            {isAnalyzing && (
-                <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center rounded-xl p-8 text-center">
-                    <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <div className={`text-cyan-400 font-mono animate-pulse font-bold text-lg mb-2 ${fontClass}`}>
+          {/* Main Dashboard Container */}
+          <div 
+            className="w-full max-w-6xl mx-auto h-auto lg:h-[85vh] lg:overflow-hidden flex flex-col lg:grid lg:grid-cols-12 gap-6 p-4 md:p-6 backdrop-blur-xl border border-slate-700 bg-slate-900/90 shadow-[0_0_50px_rgba(0,0,0,0.8)] relative transition-all duration-50"
+            style={{ clipPath: 'polygon(2% 0, 98% 0, 100% 2%, 100% 98%, 98% 100%, 2% 100%, 0 98%, 0 2%)' }}
+          >
+             {/* LEFT COLUMN: UNIFIED TRACK SELECTOR (7 Cols) */}
+             <div className="lg:col-span-7 flex flex-col h-[50vh] min-h-[350px] lg:h-full lg:min-h-0 lg:border-r border-slate-700/50 lg:pr-4 mb-2 lg:mb-0 relative">
+                 <div className="flex-shrink-0 flex justify-between items-center border-b border-cyan-500/30 pb-2 mb-2">
+                    <h2 className={`text-xl md:text-2xl ${fontClass} font-black text-cyan-400 tracking-wider flex items-center gap-2`}>
+                        <span className="text-3xl md:text-4xl text-white">01</span> {t.SELECT_SOURCE}
+                    </h2>
+                    {songList.length > 0 && (
+                        <button onClick={() => { setSongList([]); setLocalFileName(''); setAnalyzedNotes(null); }} className={`text-xs text-red-400 hover:text-red-300 underline font-bold uppercase tracking-widest ${fontClass}`}>{t.CLEAR_PLAYLIST}</button>
+                    )}
+                 </div>
+
+                 {/* Unified Playlist - Added min-h-0 and flex-1 for proper scrolling */}
+                 <div className="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar space-y-2">
+                    {/* Item 0: PLAY DEMO TRACK */}
+                    <div 
+                        onClick={loadDemoTrack} 
+                        onMouseEnter={() => playUiSound('hover')}
+                        className={`
+                            group relative flex items-center p-3 border-l-4 transition-all cursor-pointer overflow-hidden
+                            ${localFileName === "DEMO_TRACK" 
+                                ? 'bg-green-900/40 border-green-400 shadow-[inset_0_0_20px_rgba(34,197,94,0.2)]' 
+                                : 'bg-slate-800/30 border-green-800 hover:bg-slate-800 hover:border-green-500'
+                            }
+                        `}
+                    >
+                         <div className="w-10 h-10 flex items-center justify-center bg-green-900/50 rounded-full mr-4 border border-green-500/30">
+                            <span className="text-xl text-green-400">▶</span>
+                         </div>
+                         <div className="flex-1">
+                             <div className={`font-bold ${fontClass} ${localFileName === "DEMO_TRACK" ? 'text-green-300' : 'text-slate-300 group-hover:text-green-200'}`}>
+                                 {t.PLAY_DEMO}
+                             </div>
+                             <div className="text-[10px] text-slate-500 font-mono">INTERNAL // HIGH SPEED ROCK</div>
+                         </div>
+                         {localFileName === "DEMO_TRACK" && <div className="text-green-400 text-xl animate-pulse">●</div>}
+                    </div>
+
+                    {/* Loaded Songs */}
+                     {songList.map((song) => {
+                         const isActive = localFileName === song.name;
+                         const extension = song.name.split('.').pop()?.toUpperCase() || 'DAT';
+                         
+                         return (
+                            <div 
+                                key={song.id} 
+                                onClick={() => handleFileSelect(song.file)} 
+                                onMouseEnter={() => playUiSound('hover')} 
+                                className={`
+                                    group relative flex items-center p-2 border-l-4 transition-all cursor-pointer overflow-hidden
+                                    ${isActive 
+                                        ? 'bg-cyan-900/40 border-cyan-400 shadow-[inset_0_0_20px_rgba(6,182,212,0.2)]' 
+                                        : 'bg-slate-800/30 border-slate-700 hover:bg-slate-800 hover:border-white'
+                                    }
+                                `}
+                            >
+                                {song.thumbnailUrl ? (
+                                     <div className={`w-12 h-12 flex-shrink-0 mr-4 rounded border-2 overflow-hidden relative ${isActive ? 'border-cyan-500' : 'border-slate-600'}`}>
+                                        <img src={song.thumbnailUrl} alt="thumb" className="w-full h-full object-cover" />
+                                        {isActive && <div className="absolute inset-0 bg-cyan-500/20"></div>}
+                                     </div>
+                                ) : (
+                                     <div className={`
+                                        w-12 h-12 flex-shrink-0 mr-4 rounded-full border-2 flex items-center justify-center relative shadow-lg
+                                        ${isActive ? 'border-cyan-500 animate-[spin_4s_linear_infinite]' : 'border-slate-600'}
+                                        bg-gradient-to-tr from-black to-slate-800
+                                    `}>
+                                        <div className={`w-3 h-3 rounded-full ${isActive ? 'bg-cyan-400' : 'bg-slate-500'}`}></div>
+                                    </div>
+                                )}
+                                
+                                <div className="flex-1 min-w-0 z-10">
+                                    <div className={`text-sm font-bold truncate ${isActive ? 'text-cyan-100' : 'text-slate-300 group-hover:text-white'} ${fontClass}`}>{song.name}</div>
+                                    <div className="flex items-center text-[10px] text-slate-500 font-mono space-x-2 mt-1">
+                                        <span className={`px-1 rounded text-[9px] font-bold ${extension === 'MP3' || extension === 'WAV' ? 'bg-yellow-900 text-yellow-200' : 'bg-blue-900 text-blue-200'}`}>
+                                            {extension}
+                                        </span>
+                                    </div>
+                                </div>
+                                {isActive && <div className="text-cyan-400 text-lg font-bold px-2 z-10">«</div>}
+                            </div>
+                         );
+                     })}
+                 </div>
+
+                 {/* PINNED FOOTER: LOAD ACTIONS */}
+                 <div className="mt-4 pt-4 border-t border-slate-700 grid grid-cols-2 gap-4 flex-shrink-0">
+                    {/* Item 1: ADD SINGLE FILE */}
+                    <label 
+                        onMouseEnter={() => playUiSound('hover')}
+                        onClick={() => playUiSound('select')}
+                        className="group relative flex flex-col items-center justify-center p-3 border border-cyan-900 hover:border-cyan-500 bg-slate-800/50 hover:bg-slate-800 transition-all cursor-pointer overflow-hidden rounded"
+                    >
+                        <div className="mb-2 text-2xl text-cyan-500 group-hover:scale-110 transition-transform">+</div>
+                        <div className={`font-bold ${fontClass} text-xs text-center text-slate-400 group-hover:text-cyan-300`}>
+                                {t.LOAD_SINGLE}
+                        </div>
+                        <input type="file" accept="video/*,audio/*" onChange={handleSingleFileUpload} className="hidden" />
+                    </label>
+
+                    {/* Item 2: LOAD FOLDER */}
+                    <label 
+                        onMouseEnter={() => playUiSound('hover')}
+                        onClick={() => playUiSound('select')}
+                        className="group relative flex flex-col items-center justify-center p-3 border border-fuchsia-900 hover:border-fuchsia-500 bg-slate-800/50 hover:bg-slate-800 transition-all cursor-pointer overflow-hidden rounded"
+                    >
+                        <div className="mb-2 text-2xl text-fuchsia-500 group-hover:scale-110 transition-transform">
+                             {isLoadingFolder ? (
+                                <div className="w-6 h-6 border-2 border-fuchsia-500 border-t-transparent rounded-full animate-spin"></div>
+                             ) : (
+                                <span>📂</span>
+                             )}
+                        </div>
+                        <div className={`font-bold ${fontClass} text-xs text-center text-slate-400 group-hover:text-fuchsia-300`}>
+                                {t.LOAD_FOLDER}
+                        </div>
+                        {/* @ts-ignore */}
+                        <input type="file" webkitdirectory="" directory="" multiple onChange={handleFolderSelect} className="hidden" />
+                    </label>
+                 </div>
+             </div>
+
+             {/* RIGHT COLUMN: CONFIG (5 Cols) */}
+             <div className="lg:col-span-5 flex flex-col h-full relative min-h-0">
+                 <div className="border-b border-white/10 pb-2 mb-4 flex-shrink-0">
+                    <h2 className={`text-xl md:text-2xl ${fontClass} font-black text-slate-200 tracking-wider flex items-center gap-2`}>
+                        <span className="text-3xl md:text-4xl text-slate-600">02</span> {t.KEY_CONFIG}
+                    </h2>
+                 </div>
+                 
+                 <div className="space-y-6 flex-1 overflow-y-auto lg:overflow-visible custom-scrollbar">
+                     {/* Key Mode */}
+                     <div>
+                        <label className={`text-xs font-bold tracking-widest text-cyan-500 mb-2 block ${fontClass}`}>SYSTEM MODE</label>
+                        <div className="flex bg-slate-800 p-1 rounded">
+                            {[4, 5, 7].map((k) => (
+                                <button key={k} onClick={() => { setKeyMode(k as 4|5|7); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className={`flex-1 py-3 text-sm font-display font-black transition-all rounded ${keyMode === k ? 'bg-cyan-500 text-black shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>{k}K</button>
+                            ))}
+                        </div>
+                     </div>
+
+                     {/* Difficulty */}
+                     <div>
+                        <div className="flex justify-between mb-2">
+                            <label className={`text-xs font-bold tracking-widest text-cyan-500 block ${fontClass}`}>{t.LEVEL}</label>
+                            <span className={`text-xs ${fontClass} font-bold text-white`}>{getCurrentDifficultyLabel()}</span>
+                        </div>
+                        <div className="space-y-2">
+                            {DIFFICULTY_OPTIONS.map((diff) => (
+                                <button 
+                                    key={diff.value} 
+                                    onClick={() => { setLevel(diff.value); playUiSound('select'); }} 
+                                    onMouseEnter={() => playUiSound('hover')} 
+                                    className={`
+                                        w-full p-2 flex items-center justify-between border-l-4 transition-all bg-slate-800/50 active:scale-[0.98]
+                                        ${level === diff.value 
+                                            ? `${diff.color.replace('shadow-','').replace('text-','border-')} bg-slate-800` 
+                                            : 'border-slate-700 text-slate-500 hover:bg-slate-700'
+                                        }
+                                    `}
+                                >
+                                    <span className={`${fontClass} font-bold text-sm ${level === diff.value ? 'text-white' : ''}`}>{diff.label}</span>
+                                    <div className="flex gap-0.5">
+                                        {[...Array(4)].map((_, i) => (
+                                            <div key={i} className={`w-2 h-4 transform skew-x-[-10deg] ${i < (diff.value - 6) ? (level === diff.value ? diff.color.match(/text-(\w+-\d+)/)?.[0] : 'bg-slate-600') : 'bg-slate-800'}`}></div>
+                                        ))}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                     </div>
+
+                     {/* Speed */}
+                     <div>
+                        <div className="flex justify-between mb-2">
+                            <label className={`text-xs font-bold tracking-widest text-cyan-500 ${fontClass}`}>{t.SCROLL_SPEED}</label>
+                            <span className="text-xl font-display font-bold text-white bg-black px-2 py-0.5 rounded border border-slate-700">{speedMod.toFixed(1)}</span>
+                        </div>
+                        <input type="range" min="1.0" max="5.0" step="0.1" value={speedMod} onChange={(e) => setSpeedMod(parseFloat(e.target.value))} className="w-full h-8 bg-slate-800 rounded-full appearance-none cursor-pointer accent-cyan-400 border border-slate-600 touch-pan-x" />
+                        <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+                            <span>SLOW</span>
+                            <span>HYPER</span>
+                        </div>
+                     </div>
+                 </div>
+
+                 {/* Start Button */}
+                 <div className="mt-8 pt-4 flex-shrink-0">
+                     <button 
+                        onClick={startCountdownSequence} 
+                        onMouseEnter={() => playUiSound('hover')} 
+                        disabled={isAnalyzing || !analyzedNotes} 
+                        className={`
+                            relative w-full h-20 group overflow-hidden transition-all active:scale-95
+                            ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer'}
+                        `}
+                     >
+                        <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 transform skew-x-[-10deg] group-hover:from-cyan-500 group-hover:to-blue-500 transition-colors shadow-[0_0_20px_rgba(6,182,212,0.4)]"></div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            {isAnalyzing ? (
+                                <div className="flex items-center gap-2">
+                                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                     <span className={`font-bold font-mono text-white ${fontClass}`}>{t.ANALYZING}</span>
+                                </div>
+                            ) : (
+                                <div className="text-center">
+                                    <div className={`text-3xl font-black italic tracking-widest text-white drop-shadow-md ${fontClass}`}>{t.GAME_START}</div>
+                                    <div className="text-[10px] font-mono text-cyan-200 tracking-[0.5em] mt-1">INITIATE SEQUENCE</div>
+                                </div>
+                            )}
+                        </div>
+                        {/* Scanning Effect */}
+                        {!isAnalyzing && analyzedNotes && (
+                            <div className="absolute top-0 bottom-0 w-2 bg-white/50 blur-md animate-[scan_2s_linear_infinite]"></div>
+                        )}
+                     </button>
+                 </div>
+             </div>
+             
+             {/* Analysis Overlay */}
+             {isAnalyzing && (
+                <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center">
+                     <div className="w-24 h-24 border-4 border-slate-700 rounded-full relative flex items-center justify-center">
+                        <div className="absolute inset-0 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+                        <div className="text-2xl">⚡</div>
+                     </div>
+                     <div className={`text-cyan-400 font-mono animate-pulse font-bold text-xl mt-4 ${fontClass}`}>
                         {t.ANALYZING}
                     </div>
                 </div>
-            )}
-            
-            <div className="animate-fade-in space-y-4">
-                <div className="flex justify-between items-end">
-                    <label className={`text-sm font-bold tracking-widest text-cyan-400 block ${fontClass}`}>{t.SELECT_SOURCE}</label>
-                    <div className="flex gap-4">
-                        {songList.length > 0 && (
-                            <button onClick={() => { setSongList([]); setLocalFileName(''); setAnalyzedNotes(null); }} className={`text-xs text-red-400 hover:text-red-300 underline ${fontClass}`}>{t.CLEAR_PLAYLIST}</button>
-                        )}
-                    </div>
-                </div>
-                {songList.length === 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        <button onClick={handlePlayDemo} className="flex flex-col items-center justify-center w-full h-24 border-2 border-green-600/50 border-dashed rounded cursor-pointer hover:bg-green-900/20 hover:border-green-400 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')}>
-                            <div className="flex flex-col items-center justify-center">
-                                <span className="text-3xl mb-2 text-slate-500 group-hover:text-green-400">▶</span>
-                                <p className={`text-sm text-slate-400 ${fontClass} group-hover:text-green-300 transition-colors text-center font-bold`}>{t.PLAY_DEMO}</p>
-                            </div>
-                        </button>
-
-                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-700 border-dashed rounded cursor-pointer hover:bg-slate-800 hover:border-cyan-500 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')} onClick={() => playUiSound('select')}>
-                            <div className="flex flex-col items-center justify-center">
-                                <span className="text-3xl mb-2 text-slate-500 group-hover:text-cyan-400">📄</span>
-                                <p className={`text-sm text-slate-400 ${fontClass} group-hover:text-cyan-300 transition-colors text-center`}>{t.LOAD_SINGLE}<br/><span className="text-[10px] opacity-60 font-mono">(MP4, MP3)</span></p>
-                            </div>
-                            <input type="file" accept="video/*,audio/*" onChange={handleSingleFileUpload} className="hidden" />
-                        </label>
-                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-700 border-dashed rounded cursor-pointer hover:bg-slate-800 hover:border-fuchsia-500 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')} onClick={() => playUiSound('select')}>
-                            <div className="flex flex-col items-center justify-center">
-                                {isLoadingFolder ? <div className="w-6 h-6 border-2 border-fuchsia-500 border-t-transparent rounded-full animate-spin"></div> : <><span className="text-3xl mb-2 text-slate-500 group-hover:text-fuchsia-400">📂</span><p className={`text-sm text-slate-400 ${fontClass} group-hover:text-fuchsia-300 transition-colors`}>{t.LOAD_FOLDER}</p></>}
-                            </div>
-                            {/* @ts-ignore */}
-                            <input type="file" webkitdirectory="" directory="" multiple onChange={handleFolderSelect} className="hidden" />
-                        </label>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                        {songList.map((song) => (
-                            <div key={song.id} onClick={() => handleFileSelect(song.file)} onMouseEnter={() => playUiSound('hover')} className={`relative aspect-square group cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${localFileName === song.name ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.5)]' : 'border-slate-700 hover:border-white'}`}>
-                                {song.thumbnailUrl ? <img src={song.thumbnailUrl} alt={song.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /> : <div className="w-full h-full bg-slate-800 flex items-center justify-center group-hover:bg-slate-700"><div className={`w-12 h-12 rounded-full border-4 border-slate-600 flex items-center justify-center ${localFileName === song.name ? 'animate-spin-slow' : ''}`}><div className="w-3 h-3 bg-slate-900 rounded-full"></div></div></div>}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80 group-hover:opacity-60 transition-opacity"></div>
-                                <div className="absolute bottom-0 left-0 right-0 p-1.5"><div className="text-[10px] font-bold text-white truncate drop-shadow-md font-display">{song.name}</div></div>
-                                {localFileName === song.name && <div className="absolute top-1 right-1 w-2 h-2 bg-cyan-400 rounded-full animate-pulse shadow-[0_0_10px_cyan]"></div>}
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-            
-            <div>
-                <label className={`text-xs font-bold tracking-widest text-cyan-400 mb-2 block ${fontClass}`}>{t.KEY_CONFIG}</label>
-                <div className="flex space-x-2">
-                    {[4, 5, 7].map((k) => (
-                        <button key={k} onClick={() => { setKeyMode(k as 4|5|7); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className={`flex-1 py-3 text-sm font-display font-bold border rounded transition-all ${keyMode === k ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'}`}>{k} KEYS</button>
-                    ))}
-                </div>
-            </div>
-
-            {/* NEW DIFFICULTY SELECTOR */}
-            <div>
-                <label className={`text-xs font-bold tracking-widest text-cyan-400 mb-2 block flex justify-between ${fontClass}`}><span>{t.LEVEL}</span><span className="text-white font-display font-bold">{getCurrentDifficultyLabel()}</span></label>
-                <div className="grid grid-cols-4 gap-2">
-                    {DIFFICULTY_OPTIONS.map((diff) => (
-                        <button 
-                            key={diff.value} 
-                            onClick={() => { setLevel(diff.value); playUiSound('select'); }} 
-                            onMouseEnter={() => playUiSound('hover')} 
-                            className={`
-                                py-4 font-display font-bold text-sm border transition-all rounded flex items-center justify-center
-                                ${level === diff.value 
-                                    ? `bg-slate-800 scale-105 z-10 ${diff.color}` 
-                                    : 'bg-slate-900 border-slate-700 text-slate-500 hover:bg-slate-800 hover:text-slate-300'
-                                }
-                            `}
-                        >
-                            {diff.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
-
-            <div>
-                <div className="flex justify-between mb-2"><label className={`text-xs font-bold tracking-widest text-cyan-400 ${fontClass}`}>{t.SCROLL_SPEED}</label><span className="text-xs font-mono text-white">{speedMod.toFixed(1)}x</span></div>
-                <input type="range" min="1.0" max="5.0" step="0.1" value={speedMod} onChange={(e) => setSpeedMod(parseFloat(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
-            </div>
-            
-            <button onClick={startCountdownSequence} onMouseEnter={() => playUiSound('hover')} disabled={isAnalyzing || !analyzedNotes} className={`w-full py-4 bg-gradient-to-r from-cyan-700 to-blue-700 text-white font-bold text-2xl tracking-widest uppercase transition-all transform shadow-[0_0_30px_rgba(6,182,212,0.4)] border border-cyan-400/50 ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:from-cyan-600 hover:to-blue-600 hover:scale-[1.02] animate-pulse'} ${fontClass}`}>{isAnalyzing ? t.ANALYZING : t.GAME_START}</button>
+             )}
           </div>
         </div>
       )}
@@ -1665,7 +1807,7 @@ const App: React.FC = () => {
                     <h2 className="text-6xl font-display font-bold text-white/40 tracking-widest drop-shadow-md">
                         {currentThemeId === 'ignore' ? 'IGNORE PROTOCOL' : currentThemeId === 'titan' ? 'TITAN CONSTRUCT' : currentThemeId === 'queen' ? 'QUEEN PROTOCOL' : 'NEON CORE'}
                     </h2>
-                    <div className="text-cyan-500/80 font-mono mt-2 bg-black/60 inline-block px-4 py-1 rounded backdrop-blur-md border border-cyan-500/30">
+                    <div className={`text-cyan-500/80 ${fontClass} mt-2 bg-black/60 inline-block px-4 py-1 rounded backdrop-blur-md border border-cyan-500/30`}>
                         {t.SYSTEM_LINKED}: {localFileName ? localFileName : 'LOCAL_FILE'} // MODE: {keyMode}K
                     </div>
                 </div>
