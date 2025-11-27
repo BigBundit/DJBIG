@@ -1498,53 +1498,82 @@ const App: React.FC = () => {
 
       {/* TITLE SCREEN & MAIN MENU */}
       {status === GameStatus.TITLE && (
-          <div className="relative z-30 h-full flex flex-col items-center justify-center animate-fade-in px-4">
-              <h1 className="text-7xl md:text-9xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-slate-500 tracking-tighter filter drop-shadow-[0_0_25px_rgba(6,182,212,0.6)] mb-2 text-center transform hover:scale-105 transition-transform duration-500 animate-pulse">
-                DJ<span className="text-cyan-400">BIG</span>
-              </h1>
+          <div className="relative z-30 h-full w-full flex flex-col items-center justify-center overflow-hidden">
               
-              <div className="mb-12 text-center bg-black/50 backdrop-blur-sm p-4 rounded-lg border border-white/5">
-                  <p className={`text-cyan-400 font-bold tracking-[0.15em] text-sm md:text-base mb-1 ${fontClass}`}>
-                      {t.SUBTITLE}
-                  </p>
-                  <p className={`text-slate-400 font-mono text-xs md:text-sm tracking-widest ${fontClass}`}>
-                      {t.SUBTITLE_2}
-                  </p>
+              {/* VISUALS (Background Rings) - Centered */}
+              <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center">
+                  <div className="absolute w-[600px] h-[600px] border-[2px] border-dashed border-cyan-500/20 rounded-full animate-[spin_20s_linear_infinite]"></div>
+                  <div className="absolute w-[500px] h-[500px] border border-cyan-500/10 rounded-full animate-[spin-ccw_30s_linear_infinite]"></div>
               </div>
               
-              <div className="flex flex-col space-y-6 w-full max-w-sm">
+              {/* MAIN LOGO - Moved Up */}
+              <div className="relative z-10 text-center transform hover:scale-105 transition-transform duration-500 cursor-default mb-12 mt-[-100px]">
+                  <div className="flex items-end justify-center leading-none mb-4 animate-pulse">
+                      <span className="text-8xl md:text-[10rem] font-black font-display text-white italic drop-shadow-[5px_5px_0px_rgba(6,182,212,1)] tracking-tighter" style={{textShadow: '4px 4px 0px #0891b2'}}>DJ</span>
+                      <span className="text-8xl md:text-[10rem] font-black font-display text-cyan-400 italic drop-shadow-[0_0_30px_rgba(34,211,238,0.8)] ml-2" style={{textShadow: '0 0 20px cyan'}}>BIG</span>
+                  </div>
+                  <div className="inline-block bg-black/80 px-4 py-1 border-x-2 border-cyan-500 backdrop-blur-sm">
+                      <p className={`text-cyan-200 font-bold tracking-[0.5em] text-sm md:text-xl font-display uppercase`}>
+                          CYBER RHYTHM ACTION
+                      </p>
+                  </div>
+              </div>
+
+              {/* CENTERED MENU BUTTONS */}
+              <div className="flex flex-col items-center space-y-4 w-full max-w-md z-20">
+                  
+                  {/* START BUTTON */}
                   <button 
                     onClick={() => { setStatus(GameStatus.MENU); playUiSound('select'); initAudio(); }}
                     onMouseEnter={() => playUiSound('hover')}
-                    className="group relative px-8 py-4 bg-slate-900/80 border border-cyan-500/50 hover:bg-cyan-900/50 hover:border-cyan-400 transition-all rounded-lg overflow-hidden"
+                    className="group relative w-80 h-20 bg-gradient-to-r from-cyan-900/80 via-cyan-600 to-cyan-900/80 border-x-4 border-cyan-400 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.3)]"
                   >
-                      <div className="absolute inset-0 bg-cyan-400/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500"></div>
-                      <span className={`relative text-2xl font-bold tracking-[0.2em] text-cyan-100 group-hover:text-white group-hover:drop-shadow-[0_0_10px_rgba(34,211,238,0.8)] ${fontClass}`}>{t.START}</span>
+                      <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                      <div className="flex flex-col items-center justify-center h-full transform skew-x-12">
+                          <span className={`text-3xl font-black italic text-white group-hover:text-cyan-100 ${fontClass}`}>{t.START}</span>
+                          <span className="text-[10px] font-mono text-cyan-300 tracking-[0.3em]">INITIATE SEQUENCE</span>
+                      </div>
                   </button>
 
+                  {/* CUSTOMIZE */}
                   <button 
                     onClick={() => { setShowThemeMenu(true); playUiSound('select'); }}
                     onMouseEnter={() => playUiSound('hover')}
-                    className="group relative px-8 py-4 bg-slate-900/80 border border-slate-600 hover:border-purple-400 transition-all rounded-lg"
+                    className="group relative w-64 h-14 bg-gradient-to-r from-slate-800/80 via-purple-900 to-slate-800/80 border-x-4 border-purple-500 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden"
                   >
-                       <span className={`text-xl font-bold tracking-[0.2em] text-slate-400 group-hover:text-purple-300 ${fontClass}`}>{t.CUSTOMIZE}</span>
+                      <div className="flex flex-col items-center justify-center h-full transform skew-x-12">
+                          <span className={`text-xl font-bold text-slate-300 group-hover:text-purple-200 ${fontClass}`}>{t.CUSTOMIZE}</span>
+                      </div>
                   </button>
 
+                  {/* SETTING */}
                   <button 
-                    onClick={() => { setShowKeyConfig(true); playUiSound('select'); }}
-                    onMouseEnter={() => playUiSound('hover')}
-                    className="group relative px-8 py-4 bg-slate-900/80 border border-slate-600 hover:border-yellow-400 transition-all rounded-lg"
+                     onClick={() => { setShowKeyConfig(true); playUiSound('select'); }}
+                     onMouseEnter={() => playUiSound('hover')}
+                     className="group relative w-64 h-14 bg-gradient-to-r from-slate-800/80 via-yellow-900 to-slate-800/80 border-x-4 border-yellow-500 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden"
                   >
-                       <span className={`text-xl font-bold tracking-[0.2em] text-slate-400 group-hover:text-yellow-300 ${fontClass}`}>{t.SETTING}</span>
+                      <div className="flex flex-col items-center justify-center h-full transform skew-x-12">
+                          <span className={`text-xl font-bold text-slate-300 group-hover:text-yellow-200 ${fontClass}`}>{t.SETTING}</span>
+                      </div>
                   </button>
 
+                  {/* EXIT */}
                   <button 
-                    onClick={() => window.location.reload()}
-                    onMouseEnter={() => playUiSound('hover')}
-                    className="group relative px-8 py-4 bg-slate-900/80 border border-slate-600 hover:border-red-500 transition-all rounded-lg"
+                     onClick={() => window.location.reload()}
+                     onMouseEnter={() => playUiSound('hover')}
+                     className="group relative w-64 h-14 bg-gradient-to-r from-slate-800/80 via-red-900 to-slate-800/80 border-x-4 border-red-500 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden"
                   >
-                       <span className={`text-xl font-bold tracking-[0.2em] text-slate-400 group-hover:text-red-400 ${fontClass}`}>{t.EXIT}</span>
+                      <div className="flex flex-col items-center justify-center h-full transform skew-x-12">
+                          <span className={`text-lg font-bold text-slate-300 group-hover:text-red-200 ${fontClass}`}>{t.EXIT}</span>
+                      </div>
                   </button>
+
+               </div>
+
+              {/* Copyright / Info Footer - Centered */}
+              <div className="absolute bottom-8 w-full text-center">
+                  <p className="text-xs text-slate-500 font-mono">VER 2.5.0 // SYSTEM ONLINE</p>
+                  <p className="text-xs text-slate-600 font-mono mt-1">© 2024 DJBIG PROJECT. ALL RIGHTS RESERVED.</p>
               </div>
           </div>
       )}
