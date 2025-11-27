@@ -1130,15 +1130,32 @@ const App: React.FC = () => {
             />
         ))}
 
+        {/* Dark Gradient Overlay at Bottom (New) */}
+        <div className="absolute bottom-0 left-0 w-full h-1/3 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none z-10"></div>
+
+        {/* Menu Button - Show in lanes for non-Ignore themes */}
+        {currentThemeId !== 'ignore' && (
+            <button 
+                onClick={(e) => { e.stopPropagation(); togglePause(); playUiSound('select'); }}
+                className="absolute bottom-0 right-0 z-50 w-10 h-10 flex items-center justify-center bg-slate-900/80 border-t border-l border-slate-600 rounded-tl-lg hover:bg-red-900/50 hover:border-red-400 transition-all active:scale-95 group"
+            >
+                <div className="flex flex-col space-y-1">
+                    <div className="w-5 h-0.5 bg-slate-400 group-hover:bg-red-400"></div>
+                    <div className="w-5 h-0.5 bg-slate-400 group-hover:bg-red-400"></div>
+                    <div className="w-5 h-0.5 bg-slate-400 group-hover:bg-red-400"></div>
+                </div>
+            </button>
+        )}
+
         {/* JUDGE LINE (Dynamic per theme) */}
         {currentThemeId === 'ignore' ? (
-             <div className="absolute bottom-24 left-0 w-full h-1 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.9)] z-10 opacity-80 pointer-events-none"></div>
+             <div className="absolute bottom-24 left-0 w-full h-1 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.9)] z-20 opacity-80 pointer-events-none"></div>
         ) : currentThemeId === 'titan' ? (
-             <div className="absolute bottom-20 left-0 w-full h-[2px] bg-amber-500/80 shadow-[0_0_10px_rgba(245,158,11,0.5)] z-10 pointer-events-none"></div>
+             <div className="absolute bottom-20 left-0 w-full h-[2px] bg-amber-500/80 shadow-[0_0_10px_rgba(245,158,11,0.5)] z-20 pointer-events-none"></div>
         ) : currentThemeId === 'queen' ? (
-             <div className="absolute bottom-16 left-0 w-full h-[2px] bg-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.8)] z-10 pointer-events-none"></div>
+             <div className="absolute bottom-16 left-0 w-full h-[2px] bg-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.8)] z-20 pointer-events-none"></div>
         ) : (
-             <div className="absolute bottom-20 left-0 w-full h-px bg-white/20 pointer-events-none"></div>
+             <div className="absolute bottom-20 left-0 w-full h-px bg-white/20 pointer-events-none z-20"></div>
         )}
 
         {/* Hit Effects */}
@@ -1240,9 +1257,18 @@ const App: React.FC = () => {
                                 {score.toString().padStart(7, '0')}
                             </div>
                         </div>
-                        <div className="flex space-x-1 scale-75 origin-right">
-                            <div className="w-8 h-8 bg-slate-300 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)]"></div>
-                            <div className="w-8 h-8 bg-slate-300 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)]"></div>
+                        {/* Menu Button (Replaces decorative squares) */}
+                        <div className="scale-90 origin-right">
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); togglePause(); playUiSound('select'); }}
+                                className="w-10 h-10 flex items-center justify-center bg-slate-300 border border-slate-400 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)] hover:bg-white active:scale-95 transition-all group"
+                            >
+                                <div className="flex flex-col space-y-1">
+                                    <div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div>
+                                    <div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div>
+                                    <div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div>
+                                </div>
+                            </button>
                         </div>
                 </div>
             </div>
@@ -1372,15 +1398,15 @@ const App: React.FC = () => {
       {/* BACKGROUND CONTAINER */}
       <div className="absolute inset-0 z-0 pointer-events-auto overflow-hidden bg-slate-900" ref={bgRef} style={{ transition: 'transform 0.05s, filter 0.05s' }}>
         
-        {/* LAYER 1: Dynamic Background Effects (No Image) */}
+        {/* LAYER 3: Dynamic Background Effects (Menu Only) */}
         {(status === GameStatus.MENU || status === GameStatus.TITLE) && (
             <div className="absolute inset-0 z-10 pointer-events-none">
                 {layoutSettings.enableMenuBackground ? (
                     <>
-                        {/* Animated Glow Blobs */}
-                        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-purple-900/40 rounded-full blur-[100px] animate-blob"></div>
-                        <div className="absolute top-[10%] right-[-10%] w-[50%] h-[50%] bg-cyan-900/40 rounded-full blur-[100px] animate-blob animation-delay-2000"></div>
-                        <div className="absolute bottom-[-20%] left-[20%] w-[60%] h-[60%] bg-blue-900/40 rounded-full blur-[100px] animate-blob animation-delay-4000"></div>
+                        {/* Animated Glow Blobs (Blend Mode) */}
+                        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-purple-900/30 rounded-full blur-[100px] animate-blob"></div>
+                        <div className="absolute top-[10%] right-[-10%] w-[50%] h-[50%] bg-cyan-900/30 rounded-full blur-[100px] animate-blob animation-delay-2000"></div>
+                        <div className="absolute bottom-[-20%] left-[20%] w-[60%] h-[60%] bg-blue-900/30 rounded-full blur-[100px] animate-blob animation-delay-4000"></div>
                         
                         {/* Grid Texture */}
                         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:40px_40px] opacity-10"></div>
@@ -1392,7 +1418,7 @@ const App: React.FC = () => {
             </div>
         )}
 
-        {/* LAYER 2: GAMEPLAY MEDIA */}
+        {/* LAYER 4: GAMEPLAY MEDIA */}
         {(status === GameStatus.PLAYING || status === GameStatus.PAUSED || status === GameStatus.OUTRO) && (
             <>
                 {mediaType === 'video' ? (
