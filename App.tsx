@@ -98,7 +98,8 @@ const App: React.FC = () => {
   const [showThemeMenu, setShowThemeMenu] = useState<boolean>(false);
 
   // Audio Settings
-  const [audioSettings, setAudioSettings] = useState<AudioSettings>({ masterVolume: 0.5, sfxVolume: 1.0 });
+  const [audioSettings, setAudioSettings] = useState<AudioSettings>({ masterVolume: 0.5, sfxVolume: 1.0, musicVolume: 0.5 });
+  const [isBgMusicMuted, setIsBgMusicMuted] = useState<boolean>(false);
   
   // Layout Settings
   const [layoutSettings, setLayoutSettings] = useState<LayoutSettings>(DEFAULT_LAYOUT);
@@ -115,13 +116,64 @@ const App: React.FC = () => {
   // Ref to hold audio settings for access within game loop/closures without dependency issues
   const audioSettingsRef = useRef<AudioSettings>(audioSettings);
 
+  // Engine State (Refs for performance)
+  const frameRef = useRef<number>(0);
+  const startTimeRef = useRef<number>(0);
+  const pauseTimeRef = useRef<number>(0);
+  const totalPauseDurationRef = useRef<number>(0);
+  
+  // Ref to track status inside callbacks/closures
+  const statusRef = useRef<GameStatus>(GameStatus.TITLE);
+  
+  const notesRef = useRef<NoteType[]>([]);
+  const activeKeysRef = useRef<boolean[]>(new Array(7).fill(false)); // Max 7
+  const mediaRef = useRef<HTMLMediaElement>(null); // Ref for audio/video playback
+  const bgVideoRef = useRef<HTMLVideoElement>(null); // Ref for background video loop
+  const bgMusicRef = useRef<HTMLAudioElement>(null); // Ref for background music (Intro)
+  const bgRef = useRef<HTMLDivElement>(null); // Ref for background pulse
+  const progressBarRef = useRef<HTMLDivElement>(null); // Ref for progress bar
+  
+  const audioBufferRef = useRef<AudioBuffer | null>(null); // Ref to store raw audio for re-analysis
+  const audioDurationRef = useRef<number>(0); // Duration in seconds
+
+  const noiseBufferRef = useRef<AudioBuffer | null>(null); // Ref to cache noise buffer for performance
+  
+  // Touch Input State
+  const laneContainerRef = useRef<HTMLDivElement>(null);
+  const touchedLanesRef = useRef<Set<number>>(new Set());
+
+  // Visual State for React Render
+  const [renderNotes, setRenderNotes] = useState<NoteType[]>([]);
+
   // Update ref and media volume when state changes
   useEffect(() => {
       audioSettingsRef.current = audioSettings;
+      
+      // Update Gameplay Media Volume
       if (mediaRef.current) {
           mediaRef.current.volume = audioSettings.masterVolume;
       }
-  }, [audioSettings]);
+
+      // Update Background Music Volume
+      if (bgMusicRef.current) {
+          const effectiveVolume = isBgMusicMuted ? 0 : (audioSettings.masterVolume * audioSettings.musicVolume);
+          bgMusicRef.current.volume = effectiveVolume;
+      }
+  }, [audioSettings, isBgMusicMuted]);
+
+  // Handle Background Music Playback
+  useEffect(() => {
+    if (bgMusicRef.current) {
+        if (status === GameStatus.TITLE || status === GameStatus.MENU) {
+            bgMusicRef.current.play().catch(e => {
+                console.log("Auto-play prevented (User interaction needed first):", e);
+            });
+        } else {
+            bgMusicRef.current.pause();
+            bgMusicRef.current.currentTime = 0;
+        }
+    }
+  }, [status]);
 
   // Load Persistence Data
   useEffect(() => {
@@ -138,12 +190,23 @@ const App: React.FC = () => {
       }
 
       // Themes
-      setUnlockedThemes(new Set(['neon', 'ignore', 'titan', 'queen']));
+      const defaultUnlocks = ['neon', 'ignore', 'titan', 'queen'];
+      const storedUnlocks = localStorage.getItem('djbig_unlocked_themes');
+      if (storedUnlocks) {
+          try { 
+              const parsed = JSON.parse(storedUnlocks);
+              setUnlockedThemes(new Set([...defaultUnlocks, ...parsed]));
+          } catch(e) {
+              setUnlockedThemes(new Set(defaultUnlocks as ThemeId[]));
+          }
+      } else {
+          setUnlockedThemes(new Set(defaultUnlocks as ThemeId[]));
+      }
 
       // Active Theme
       const storedActiveTheme = localStorage.getItem('djbig_active_theme');
-      if (storedActiveTheme === 'neon' || storedActiveTheme === 'ignore' || storedActiveTheme === 'titan' || storedActiveTheme === 'queen') {
-          setCurrentThemeId(storedActiveTheme);
+      if (storedActiveTheme && ['neon', 'ignore', 'titan', 'queen'].includes(storedActiveTheme)) {
+          setCurrentThemeId(storedActiveTheme as ThemeId);
       } else {
           setCurrentThemeId('ignore');
       }
@@ -208,34 +271,6 @@ const App: React.FC = () => {
       }));
   }, [keyMode, keyMappings]);
 
-  // Engine State (Refs for performance)
-  const frameRef = useRef<number>(0);
-  const startTimeRef = useRef<number>(0);
-  const pauseTimeRef = useRef<number>(0);
-  const totalPauseDurationRef = useRef<number>(0);
-  
-  // Ref to track status inside callbacks/closures
-  const statusRef = useRef<GameStatus>(GameStatus.TITLE);
-  
-  const notesRef = useRef<NoteType[]>([]);
-  const activeKeysRef = useRef<boolean[]>(new Array(7).fill(false)); // Max 7
-  const mediaRef = useRef<HTMLMediaElement>(null); // Ref for audio/video playback
-  const bgVideoRef = useRef<HTMLVideoElement>(null); // Ref for background video loop
-  const bgRef = useRef<HTMLDivElement>(null); // Ref for background pulse
-  const progressBarRef = useRef<HTMLDivElement>(null); // Ref for progress bar
-  
-  const audioBufferRef = useRef<AudioBuffer | null>(null); // Ref to store raw audio for re-analysis
-  const audioDurationRef = useRef<number>(0); // Duration in seconds
-
-  const noiseBufferRef = useRef<AudioBuffer | null>(null); // Ref to cache noise buffer for performance
-  
-  // Touch Input State
-  const laneContainerRef = useRef<HTMLDivElement>(null);
-  const touchedLanesRef = useRef<Set<number>>(new Set());
-
-  // Visual State for React Render
-  const [renderNotes, setRenderNotes] = useState<NoteType[]>([]);
-
   // Update status ref
   useEffect(() => {
     statusRef.current = status;
@@ -247,6 +282,10 @@ const App: React.FC = () => {
     }
     if (audioCtxRef.current.state === 'suspended') {
       audioCtxRef.current.resume();
+    }
+    // Also try to play BG music if it was blocked by autoplay policy
+    if (bgMusicRef.current && (status === GameStatus.TITLE || status === GameStatus.MENU)) {
+        bgMusicRef.current.play().catch(()=>{});
     }
     return audioCtxRef.current;
   };
@@ -274,26 +313,48 @@ const App: React.FC = () => {
       if (!audioCtxRef.current) return; // Only play if context is already initialized
       const ctx = audioCtxRef.current;
       const t = ctx.currentTime;
-      const osc = ctx.createOscillator();
+      
       const gain = ctx.createGain();
       
       if (type === 'hover') {
+          // Subtle blip
+          const osc = ctx.createOscillator();
           osc.frequency.setValueAtTime(400, t);
           osc.frequency.exponentialRampToValueAtTime(200, t + 0.05);
           gain.gain.setValueAtTime(getVol(0.05), t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
           osc.type = 'sine';
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.1);
       } else {
-          osc.frequency.setValueAtTime(800, t);
-          osc.frequency.exponentialRampToValueAtTime(400, t + 0.1);
-          gain.gain.setValueAtTime(getVol(0.1), t);
-          osc.type = 'square';
+          // SELECT: VINYL SCRATCH EFFECT
+          // Bandpass filter sweep over noise to simulate "Wiki-Wiki" scratch sound
+          const noise = ctx.createBufferSource();
+          noise.buffer = getNoiseBuffer(ctx);
+          noise.loop = true;
+
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.Q.value = 2.0; // Resonance
+          
+          // Frequency Sweep (Zip up then down)
+          filter.frequency.setValueAtTime(400, t);
+          filter.frequency.linearRampToValueAtTime(1500, t + 0.05);
+          filter.frequency.linearRampToValueAtTime(100, t + 0.15);
+
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(getVol(0.6), t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+
+          noise.connect(filter);
+          filter.connect(gain);
+          gain.connect(ctx.destination);
+          noise.start(t);
+          noise.stop(t + 0.2);
       }
-      
-      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t);
-      osc.stop(t + 0.1);
   };
 
   const performAnalysis = async (buffer: AudioBuffer) => {
@@ -978,9 +1039,7 @@ const App: React.FC = () => {
     if (e.key === 'F8') {
         e.preventDefault();
         // Toggle Audio
-        const newMute = !audioSettingsRef.current.masterVolume; // Simple toggle logic for demo
-        // In reality we should probably have a separate mute state, but this works for "toggle output"
-        // Let's implement a clean mute
+        const newMute = !audioSettingsRef.current.masterVolume; 
         const isMuted = audioSettingsRef.current.masterVolume === 0;
         setAudioSettings(prev => ({ ...prev, masterVolume: isMuted ? 0.5 : 0 }));
         setFeedback({ text: isMuted ? "SOUND ON" : "MUTED", color: "text-white", id: Date.now() });
@@ -1394,11 +1453,14 @@ const App: React.FC = () => {
   return (
     <div className={`relative w-full h-screen bg-black overflow-hidden text-slate-100 select-none ${isShaking ? 'animate-[shake_0.2s_ease-in-out]' : ''}`}>
       
+      {/* BACKGROUND MUSIC ELEMENT */}
+      <audio ref={bgMusicRef} src="/musicbg.mp3" loop />
+
       {/* BACKGROUND CONTAINER */}
       <div className="absolute inset-0 z-0 pointer-events-auto overflow-hidden bg-slate-900" ref={bgRef} style={{ transition: 'transform 0.05s, filter 0.05s' }}>
         
         {/* LAYER 3: Menu Background */}
-        {(status === GameStatus.MENU || status === GameStatus.TITLE) && (
+        {(status === GameStatus.TITLE || status === GameStatus.MENU) && (
             <div className="absolute inset-0 z-10 pointer-events-none">
                 {layoutSettings.enableMenuBackground ? (
                     <>
@@ -1445,6 +1507,28 @@ const App: React.FC = () => {
       </div>
 
       <div className="scanlines z-50 pointer-events-none opacity-40"></div>
+      
+      {/* TOP RIGHT BGM TOGGLE (MOVED TO BOTTOM RIGHT) */}
+      {(status === GameStatus.TITLE || status === GameStatus.MENU) && (
+        <button 
+            onClick={() => setIsBgMusicMuted(!isBgMusicMuted)}
+            className="absolute bottom-4 right-4 z-[70] p-2 bg-black/50 hover:bg-black/80 text-cyan-400 border border-cyan-500 rounded-full transition-all active:scale-95"
+            title="Toggle Intro Music"
+        >
+            {isBgMusicMuted ? (
+                // Mute Icon
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+            ) : (
+                // Speaker Icon
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+            )}
+        </button>
+      )}
 
       {/* OVERLAY MENUS */}
       {showKeyConfig && (
@@ -1457,6 +1541,7 @@ const App: React.FC = () => {
             onLayoutSettingsChange={handleLayoutChange}
             onSave={saveKeyMappings}
             onClose={() => setShowKeyConfig(false)}
+            onPlaySound={playUiSound}
             t={t}
             fontClass={fontClass}
           />
@@ -1468,6 +1553,7 @@ const App: React.FC = () => {
             currentTheme={currentThemeId}
             onSelectTheme={handleSelectTheme}
             onClose={() => setShowThemeMenu(false)}
+            onPlaySound={playUiSound}
             t={t}
             fontClass={fontClass}
           />
@@ -1589,7 +1675,7 @@ const App: React.FC = () => {
           </button>
 
            <button 
-             onClick={() => setShowThemeMenu(true)}
+             onClick={() => { setShowThemeMenu(true); playUiSound('select'); }}
              className="absolute top-4 right-16 p-2 text-slate-400 hover:text-purple-400 transition-all duration-300 flex items-center space-x-2 z-50 bg-black/50 rounded-full px-4 active:scale-95"
           >
              <span className={`font-bold text-sm hidden md:inline ${fontClass}`}>{t.CUSTOMIZE}</span>
@@ -1597,7 +1683,7 @@ const App: React.FC = () => {
           </button>
 
           <button 
-             onClick={() => setShowKeyConfig(true)}
+             onClick={() => { setShowKeyConfig(true); playUiSound('select'); }}
              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-cyan-400 hover:rotate-90 transition-all duration-500 z-50 bg-black/50 rounded-full active:scale-95"
           >
              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12-0.61l1.92,3.32c0.12-0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
@@ -1615,7 +1701,7 @@ const App: React.FC = () => {
                         <span className="text-3xl md:text-4xl text-white">01</span> {t.SELECT_SOURCE}
                     </h2>
                     {songList.length > 0 && (
-                        <button onClick={() => { setSongList([]); setLocalFileName(''); setAnalyzedNotes(null); }} className={`text-xs text-red-400 hover:text-red-300 underline font-bold uppercase tracking-widest ${fontClass}`}>{t.CLEAR_PLAYLIST}</button>
+                        <button onClick={() => { setSongList([]); setLocalFileName(''); setAnalyzedNotes(null); playUiSound('select'); }} className={`text-xs text-red-400 hover:text-red-300 underline font-bold uppercase tracking-widest ${fontClass}`}>{t.CLEAR_PLAYLIST}</button>
                     )}
                  </div>
 
@@ -1653,7 +1739,7 @@ const App: React.FC = () => {
                          return (
                             <div 
                                 key={song.id} 
-                                onClick={() => handleFileSelect(song.file)} 
+                                onClick={() => { handleFileSelect(song.file); playUiSound('select'); }} 
                                 onMouseEnter={() => playUiSound('hover')} 
                                 className={`
                                     group relative flex items-center p-2 border-l-4 transition-all cursor-pointer overflow-hidden
@@ -1785,7 +1871,13 @@ const App: React.FC = () => {
                             <label className={`text-xs font-bold tracking-widest text-cyan-500 ${fontClass}`}>{t.SCROLL_SPEED}</label>
                             <span className="text-xl font-display font-bold text-white bg-black px-2 py-0.5 rounded border border-slate-700">{speedMod.toFixed(1)}</span>
                         </div>
-                        <input type="range" min="1.0" max="5.0" step="0.1" value={speedMod} onChange={(e) => setSpeedMod(parseFloat(e.target.value))} className="w-full h-8 bg-slate-800 rounded-full appearance-none cursor-pointer accent-cyan-400 border border-slate-600 touch-pan-x" />
+                        <input 
+                            type="range" min="1.0" max="5.0" step="0.1" 
+                            value={speedMod} 
+                            onChange={(e) => setSpeedMod(parseFloat(e.target.value))} 
+                            onMouseDown={() => playUiSound('select')}
+                            className="w-full h-8 bg-slate-800 rounded-full appearance-none cursor-pointer accent-cyan-400 border border-slate-600 touch-pan-x" 
+                        />
                         <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
                             <span>SLOW</span>
                             <span>HYPER</span>

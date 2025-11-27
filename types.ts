@@ -81,6 +81,7 @@ export interface KeyMapping {
 export interface AudioSettings {
     masterVolume: number;
     sfxVolume: number;
+    musicVolume: number;
 }
 
 export interface LayoutSettings {

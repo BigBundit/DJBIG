@@ -8,6 +8,7 @@ interface ThemeSelectionMenuProps {
     currentTheme: ThemeId;
     onSelectTheme: (id: ThemeId) => void;
     onClose: () => void;
+    onPlaySound: (type: 'hover' | 'select' | 'back' | 'scratch') => void;
     t: any;
     fontClass: string;
 }
@@ -17,6 +18,7 @@ export const ThemeSelectionMenu: React.FC<ThemeSelectionMenuProps> = ({
     currentTheme, 
     onSelectTheme, 
     onClose,
+    onPlaySound,
     t,
     fontClass
 }) => {
@@ -47,7 +49,7 @@ export const ThemeSelectionMenu: React.FC<ThemeSelectionMenuProps> = ({
                         <p className={`text-slate-400 font-mono text-sm ${fontClass}`}>{t.THEME_SUB}</p>
                     </div>
                     <button 
-                        onClick={onClose}
+                        onClick={() => { onPlaySound('select'); onClose(); }}
                         className={`px-6 py-2 border border-slate-600 hover:border-white text-slate-400 hover:text-white transition-colors rounded font-bold ${fontClass}`}
                     >
                         {t.CLOSE_SYSTEM}
@@ -124,6 +126,7 @@ export const ThemeSelectionMenu: React.FC<ThemeSelectionMenuProps> = ({
                                         ${theme.receptorStyle === 'box' ? 'border-4' : ''}
                                         ${theme.receptorStyle === 'bracket' ? 'border-x-4 border-b-4 rounded-b-lg' : ''}
                                         ${theme.receptorStyle === 'line' ? 'border-b-4 rounded-b' : ''}
+                                        ${theme.receptorStyle === 'button' ? 'rounded border-x-2 border-t-2 border-b-4' : ''}
                                         ${isSelected ? 'border-cyan-400' : isUnlocked ? 'border-slate-500' : 'border-slate-800'}
                                     `}>
                                          <div className={`w-full h-full opacity-20 ${isSelected ? 'bg-cyan-400' : ''}`}></div>

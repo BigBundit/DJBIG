@@ -12,6 +12,7 @@ interface KeyConfigMenuProps {
     onLayoutSettingsChange: (settings: LayoutSettings) => void;
     onSave: (newMappings: KeyMapping) => void;
     onClose: () => void;
+    onPlaySound: (type: 'hover' | 'select' | 'back' | 'scratch') => void;
     t: any;
     fontClass: string;
 }
@@ -25,6 +26,7 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
     onLayoutSettingsChange,
     onSave, 
     onClose,
+    onPlaySound,
     t,
     fontClass
 }) => {
@@ -64,20 +66,23 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
             }));
 
             setBindingIndex(null);
+            onPlaySound('select');
         }
     };
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [bindingIndex, activeMode, localMappings]);
+    }, [bindingIndex, activeMode, localMappings, onPlaySound]);
 
     const handleSave = () => {
+        onPlaySound('select');
         onSave(localMappings);
         onClose();
     };
 
     const resetToDefault = () => {
+         onPlaySound('select');
          setLocalMappings({
             4: ['d', 'f', 'j', 'k'],
             5: ['d', 'f', ' ', 'j', 'k'],
@@ -86,6 +91,7 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
     };
 
     const toggleFullScreen = () => {
+        onPlaySound('select');
         if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen().catch(err => {
                 console.error(`Error enabling full-screen mode: ${err.message}`);
@@ -97,10 +103,10 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
         }
     };
 
-    const handleVolumeChange = (type: 'master' | 'sfx', value: number) => {
+    const handleVolumeChange = (type: 'master' | 'sfx' | 'music', value: number) => {
         onAudioSettingsChange({
             ...audioSettings,
-            [type === 'master' ? 'masterVolume' : 'sfxVolume']: value
+            [type === 'master' ? 'masterVolume' : type === 'sfx' ? 'sfxVolume' : 'musicVolume']: value
         });
     };
 
@@ -182,6 +188,9 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                             <div className="text-[10px] font-mono text-cyan-600 tracking-[0.5em]">CONFIG_MODULE_V2</div>
                         </div>
                      </div>
+                     <button onClick={() => { onPlaySound('select'); onClose(); }} className="text-slate-500 hover:text-white transition-colors">
+                        ✕
+                     </button>
                 </div>
 
                 {/* CONTENT GRID */}
@@ -206,12 +215,12 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                 <CyberToggle 
                                     label={t.MENU_BG} 
                                     isActive={!!layoutSettings.enableMenuBackground} 
-                                    onClick={() => onLayoutSettingsChange({...layoutSettings, enableMenuBackground: !layoutSettings.enableMenuBackground})} 
+                                    onClick={() => { onPlaySound('select'); onLayoutSettingsChange({...layoutSettings, enableMenuBackground: !layoutSettings.enableMenuBackground}); }} 
                                 />
                                 <CyberToggle 
                                     label={t.LANGUAGE} 
                                     isActive={layoutSettings.language === 'en'} 
-                                    onClick={() => onLayoutSettingsChange({...layoutSettings, language: layoutSettings.language === 'en' ? 'th' : 'en'})}
+                                    onClick={() => { onPlaySound('select'); onLayoutSettingsChange({...layoutSettings, language: layoutSettings.language === 'en' ? 'th' : 'en'}); }}
                                     subLabels={['TH', 'EN']}
                                 />
                              </div>
@@ -225,7 +234,7 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                         return (
                                             <button
                                                 key={pos}
-                                                onClick={() => onLayoutSettingsChange({...layoutSettings, lanePosition: pos})}
+                                                onClick={() => { onPlaySound('select'); onLayoutSettingsChange({...layoutSettings, lanePosition: pos}); }}
                                                 className={`
                                                     h-16 border rounded bg-slate-800/50 relative overflow-hidden group transition-all
                                                     ${active ? 'border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.2)]' : 'border-slate-700 hover:border-slate-500'}
@@ -264,6 +273,11 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                     value={audioSettings.sfxVolume} 
                                     onChange={(v) => handleVolumeChange('sfx', v)} 
                                 />
+                                <CyberSlider 
+                                    label={t.MUSIC_VOL} 
+                                    value={audioSettings.musicVolume ?? 1.0} // Fallback for old saves
+                                    onChange={(v) => handleVolumeChange('music', v)} 
+                                />
                              </div>
                         </div>
 
@@ -294,7 +308,7 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                     {[4, 5, 7].map((mode) => (
                                         <button
                                             key={mode}
-                                            onClick={() => { setActiveMode(mode as 4|5|7); setBindingIndex(null); }}
+                                            onClick={() => { onPlaySound('select'); setActiveMode(mode as 4|5|7); setBindingIndex(null); }}
                                             className={`
                                                 px-4 py-1 text-sm font-bold font-display skew-x-[-10deg] transition-all border
                                                 ${activeMode === mode 
@@ -323,7 +337,7 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                         return (
                                             <button 
                                                 key={idx}
-                                                onClick={() => setBindingIndex(idx)}
+                                                onClick={() => { onPlaySound('select'); setBindingIndex(idx); }}
                                                 className={`
                                                     relative group flex-1 max-w-[80px] h-full flex flex-col justify-end items-center 
                                                     transition-all duration-200
