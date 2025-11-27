@@ -714,6 +714,9 @@ const App: React.FC = () => {
     if (activeKeysRef.current[laneIndex]) return;
     activeKeysRef.current[laneIndex] = true;
 
+    // ALWAYS PLAY SOUND ON PRESS (Moved here to ensure sound regardless of hit/miss/ghost tap)
+    playHitSound(laneIndex);
+
     const now = performance.now();
     // Find nearest note
     const elapsed = now - startTimeRef.current - totalPauseDurationRef.current;
@@ -733,8 +736,6 @@ const App: React.FC = () => {
         else if (dist < 20) hitType = ScoreRating.BAD;
 
         if (hitType !== null) {
-            playHitSound(laneIndex);
-
             // NORMAL NOTE HIT
             targetNote.hit = true;
             
@@ -760,6 +761,10 @@ const App: React.FC = () => {
                 setScore(s => s + 10);
                 setCombo(0);
                 setFeedback({ text: "10%", color: "text-yellow-400", id: Date.now() });
+                // Vibration for bad hit
+                if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                    navigator.vibrate(50);
+                }
             }
 
             if (hitType !== ScoreRating.BAD) {
@@ -771,9 +776,7 @@ const App: React.FC = () => {
                 });
             }
         }
-    } else {
-        playHitSound(laneIndex);
-    }
+    } 
   }, [status, isAutoPlay, combo, maxCombo, soundProfile]);
 
   const releaseLane = useCallback((laneIndex: number) => {
@@ -881,6 +884,10 @@ const App: React.FC = () => {
         setHealth(h => Math.max(0, h - 4));
         setFeedback({ text: "MISS", color: "text-red-500", id: Date.now() });
         setIsShaking(true);
+        // Vibration for miss
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate(200);
+        }
         setTimeout(() => setIsShaking(false), 200);
       }
     });
@@ -912,10 +919,31 @@ const App: React.FC = () => {
   }, [status, update]);
 
   // Input Handling
+  const handleExit = () => {
+    // Attempt to close
+    try {
+        window.close();
+    } catch (e) { console.log(e); }
+    // Fallback
+    window.location.href = "about:blank";
+  };
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((showKeyConfig || showThemeMenu) && e.key === 'Escape') {
         setShowKeyConfig(false);
         setShowThemeMenu(false);
+        return;
+    }
+
+    if (e.key === 'Escape') {
+        if (status === GameStatus.TITLE) {
+           handleExit();
+        } else if (status === GameStatus.MENU) {
+           setStatus(GameStatus.TITLE);
+           playUiSound('select');
+        } else {
+           togglePause();
+        }
         return;
     }
 
@@ -943,14 +971,19 @@ const App: React.FC = () => {
         setIsAutoPlay(prev => !prev);
         setFeedback({ text: isAutoPlay ? "AUTO OFF" : "AUTO ON", color: "text-fuchsia-400", id: Date.now() });
     }
+    if (e.key === 'F8') {
+        e.preventDefault();
+        // Toggle Audio
+        const newMute = !audioSettingsRef.current.masterVolume; // Simple toggle logic for demo
+        // In reality we should probably have a separate mute state, but this works for "toggle output"
+        // Let's implement a clean mute
+        const isMuted = audioSettingsRef.current.masterVolume === 0;
+        setAudioSettings(prev => ({ ...prev, masterVolume: isMuted ? 0.5 : 0 }));
+        setFeedback({ text: isMuted ? "SOUND ON" : "MUTED", color: "text-white", id: Date.now() });
+    }
     if (e.key === 'F9') {
         e.preventDefault();
         triggerOutro();
-        return;
-    }
-    
-    if (e.key === 'Escape') {
-        togglePause();
         return;
     }
 
@@ -1182,7 +1215,7 @@ const App: React.FC = () => {
 
                     {/* RIGHT SIDEBAR: VERTICAL GAUGE */}
                     <div className="w-6 bg-slate-900 border-l border-slate-700 relative flex flex-col justify-end p-0.5">
-                        <div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`} style={{writingMode: 'vertical-rl'}}>{t.GROOVE}</div>
+                        <div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`}>{t.GROOVE}</div>
                         <div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700">
                                 <div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div>
                         </div>
@@ -1332,18 +1365,18 @@ const App: React.FC = () => {
     <div className={`relative w-full h-screen bg-black overflow-hidden text-slate-100 select-none ${isShaking ? 'animate-[shake_0.2s_ease-in-out]' : ''}`}>
       
       {/* BACKGROUND LAYER */}
-      <div className="absolute inset-0 z-0 pointer-events-auto bg-slate-950 overflow-hidden" ref={bgRef} style={{ transition: 'transform 0.05s, filter 0.05s' }}>
+      <div className="absolute inset-0 z-0 pointer-events-auto overflow-hidden bg-slate-900" ref={bgRef} style={{ transition: 'transform 0.05s, filter 0.05s' }}>
         
         {status === GameStatus.PLAYING || status === GameStatus.PAUSED || status === GameStatus.OUTRO ? (
              <>
                 {mediaType === 'audio' ? (
                      <div className="absolute inset-0 w-full h-full bg-slate-900">
                         <img 
-                            src="bg01.png" 
+                            src="/bg01.png" 
                             alt="concert bg"
-                            className="w-full h-full object-cover opacity-50 animate-camera-drift"
+                            className="w-full h-full object-cover opacity-80 animate-camera-drift"
                         />
-                        <div className="absolute inset-0 bg-slate-950/80"></div>
+                        <div className="absolute inset-0 bg-slate-950/40"></div>
                      </div>
                 ) : (
                     <video
@@ -1366,18 +1399,19 @@ const App: React.FC = () => {
         ) : (
             <div className="w-full h-full relative overflow-hidden bg-black">
                  {layoutSettings.enableMenuBackground && (
-                    <>
-                        <img 
-                           src="bg01.png" 
-                           className="absolute inset-0 w-full h-full object-cover opacity-60 animate-camera-drift"
-                        />
-                        <div className="absolute inset-0 bg-slate-950/70"></div>
-                    </>
+                    <div className="absolute inset-0 w-full h-full">
+                        {/* Dynamic Light Background */}
+                        <div className="absolute inset-0 bg-slate-900"></div>
+                        <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-purple-600/30 rounded-full mix-blend-screen filter blur-[100px] opacity-70 animate-blob"></div>
+                        <div className="absolute top-[0%] right-[-10%] w-[50%] h-[50%] bg-cyan-500/30 rounded-full mix-blend-screen filter blur-[100px] opacity-70 animate-blob animation-delay-2000"></div>
+                        <div className="absolute bottom-[-20%] left-[20%] w-[60%] h-[60%] bg-blue-600/30 rounded-full mix-blend-screen filter blur-[100px] opacity-70 animate-blob animation-delay-4000"></div>
+                        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_center,black_40%,transparent_100%)] opacity-30"></div>
+                    </div>
                  )}
-                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]"></div>
+                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.6)_100%)]"></div>
             </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-r from-black via-slate-950/20 to-transparent pointer-events-none"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-slate-950/20 to-transparent pointer-events-none"></div>
       </div>
 
       <div className="scanlines z-50 pointer-events-none opacity-40"></div>
@@ -1513,7 +1547,7 @@ const App: React.FC = () => {
             SETUP <span className="text-cyan-400">PHASE</span>
           </h1>
           
-          <div className="w-full max-w-2xl space-y-4 p-5 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl relative transition-all duration-50 bg-black/80">
+          <div className="w-full max-w-3xl min-h-[600px] space-y-8 py-12 px-12 backdrop-blur-xl border border-slate-700 rounded-xl shadow-2xl relative transition-all duration-50 bg-black/80 flex flex-col justify-center">
             {isAnalyzing && (
                 <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center rounded-xl p-8 text-center">
                     <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -1523,7 +1557,7 @@ const App: React.FC = () => {
                 </div>
             )}
             
-            <div className="animate-fade-in space-y-3">
+            <div className="animate-fade-in space-y-4">
                 <div className="flex justify-between items-end">
                     <label className={`text-sm font-bold tracking-widest text-cyan-400 block ${fontClass}`}>{t.SELECT_SOURCE}</label>
                     <div className="flex gap-4">
@@ -1534,30 +1568,30 @@ const App: React.FC = () => {
                 </div>
                 {songList.length === 0 ? (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        <button onClick={handlePlayDemo} className="flex flex-col items-center justify-center w-full h-20 border-2 border-green-600/50 border-dashed rounded cursor-pointer hover:bg-green-900/20 hover:border-green-400 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')}>
+                        <button onClick={handlePlayDemo} className="flex flex-col items-center justify-center w-full h-24 border-2 border-green-600/50 border-dashed rounded cursor-pointer hover:bg-green-900/20 hover:border-green-400 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')}>
                             <div className="flex flex-col items-center justify-center">
-                                <span className="text-2xl mb-1 text-slate-500 group-hover:text-green-400">▶</span>
-                                <p className={`text-xs text-slate-400 ${fontClass} group-hover:text-green-300 transition-colors text-center font-bold`}>{t.PLAY_DEMO}</p>
+                                <span className="text-3xl mb-2 text-slate-500 group-hover:text-green-400">▶</span>
+                                <p className={`text-sm text-slate-400 ${fontClass} group-hover:text-green-300 transition-colors text-center font-bold`}>{t.PLAY_DEMO}</p>
                             </div>
                         </button>
 
-                        <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-slate-700 border-dashed rounded cursor-pointer hover:bg-slate-800 hover:border-cyan-500 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')} onClick={() => playUiSound('select')}>
+                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-700 border-dashed rounded cursor-pointer hover:bg-slate-800 hover:border-cyan-500 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')} onClick={() => playUiSound('select')}>
                             <div className="flex flex-col items-center justify-center">
-                                <span className="text-2xl mb-1 text-slate-500 group-hover:text-cyan-400">📄</span>
-                                <p className={`text-xs text-slate-400 ${fontClass} group-hover:text-cyan-300 transition-colors text-center`}>{t.LOAD_SINGLE}<br/><span className="text-[10px] opacity-60 font-mono">(MP4, MP3)</span></p>
+                                <span className="text-3xl mb-2 text-slate-500 group-hover:text-cyan-400">📄</span>
+                                <p className={`text-sm text-slate-400 ${fontClass} group-hover:text-cyan-300 transition-colors text-center`}>{t.LOAD_SINGLE}<br/><span className="text-[10px] opacity-60 font-mono">(MP4, MP3)</span></p>
                             </div>
                             <input type="file" accept="video/*,audio/*" onChange={handleSingleFileUpload} className="hidden" />
                         </label>
-                        <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-slate-700 border-dashed rounded cursor-pointer hover:bg-slate-800 hover:border-fuchsia-500 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')} onClick={() => playUiSound('select')}>
+                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-slate-700 border-dashed rounded cursor-pointer hover:bg-slate-800 hover:border-fuchsia-500 transition-all bg-slate-900/50 group" onMouseEnter={() => playUiSound('hover')} onClick={() => playUiSound('select')}>
                             <div className="flex flex-col items-center justify-center">
-                                {isLoadingFolder ? <div className="w-6 h-6 border-2 border-fuchsia-500 border-t-transparent rounded-full animate-spin"></div> : <><span className="text-2xl mb-1 text-slate-500 group-hover:text-fuchsia-400">📂</span><p className={`text-xs text-slate-400 ${fontClass} group-hover:text-fuchsia-300 transition-colors`}>{t.LOAD_FOLDER}</p></>}
+                                {isLoadingFolder ? <div className="w-6 h-6 border-2 border-fuchsia-500 border-t-transparent rounded-full animate-spin"></div> : <><span className="text-3xl mb-2 text-slate-500 group-hover:text-fuchsia-400">📂</span><p className={`text-sm text-slate-400 ${fontClass} group-hover:text-fuchsia-300 transition-colors`}>{t.LOAD_FOLDER}</p></>}
                             </div>
                             {/* @ts-ignore */}
                             <input type="file" webkitdirectory="" directory="" multiple onChange={handleFolderSelect} className="hidden" />
                         </label>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                         {songList.map((song) => (
                             <div key={song.id} onClick={() => handleFileSelect(song.file)} onMouseEnter={() => playUiSound('hover')} className={`relative aspect-square group cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${localFileName === song.name ? 'border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.5)]' : 'border-slate-700 hover:border-white'}`}>
                                 {song.thumbnailUrl ? <img src={song.thumbnailUrl} alt={song.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" /> : <div className="w-full h-full bg-slate-800 flex items-center justify-center group-hover:bg-slate-700"><div className={`w-12 h-12 rounded-full border-4 border-slate-600 flex items-center justify-center ${localFileName === song.name ? 'animate-spin-slow' : ''}`}><div className="w-3 h-3 bg-slate-900 rounded-full"></div></div></div>}
@@ -1571,17 +1605,17 @@ const App: React.FC = () => {
             </div>
             
             <div>
-                <label className={`text-xs font-bold tracking-widest text-cyan-400 mb-1 block ${fontClass}`}>{t.KEY_CONFIG}</label>
+                <label className={`text-xs font-bold tracking-widest text-cyan-400 mb-2 block ${fontClass}`}>{t.KEY_CONFIG}</label>
                 <div className="flex space-x-2">
                     {[4, 5, 7].map((k) => (
-                        <button key={k} onClick={() => { setKeyMode(k as 4|5|7); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className={`flex-1 py-1.5 text-xs font-display font-bold border rounded transition-all ${keyMode === k ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'}`}>{k} KEYS</button>
+                        <button key={k} onClick={() => { setKeyMode(k as 4|5|7); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className={`flex-1 py-3 text-sm font-display font-bold border rounded transition-all ${keyMode === k ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_10px_rgba(34,211,238,0.4)]' : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'}`}>{k} KEYS</button>
                     ))}
                 </div>
             </div>
 
             {/* NEW DIFFICULTY SELECTOR */}
             <div>
-                <label className={`text-xs font-bold tracking-widest text-cyan-400 mb-1 block flex justify-between ${fontClass}`}><span>{t.LEVEL}</span><span className="text-white font-display font-bold">{getCurrentDifficultyLabel()}</span></label>
+                <label className={`text-xs font-bold tracking-widest text-cyan-400 mb-2 block flex justify-between ${fontClass}`}><span>{t.LEVEL}</span><span className="text-white font-display font-bold">{getCurrentDifficultyLabel()}</span></label>
                 <div className="grid grid-cols-4 gap-2">
                     {DIFFICULTY_OPTIONS.map((diff) => (
                         <button 
@@ -1589,7 +1623,7 @@ const App: React.FC = () => {
                             onClick={() => { setLevel(diff.value); playUiSound('select'); }} 
                             onMouseEnter={() => playUiSound('hover')} 
                             className={`
-                                py-3 font-display font-bold text-xs border transition-all rounded flex items-center justify-center
+                                py-4 font-display font-bold text-sm border transition-all rounded flex items-center justify-center
                                 ${level === diff.value 
                                     ? `bg-slate-800 scale-105 z-10 ${diff.color}` 
                                     : 'bg-slate-900 border-slate-700 text-slate-500 hover:bg-slate-800 hover:text-slate-300'
@@ -1603,11 +1637,11 @@ const App: React.FC = () => {
             </div>
 
             <div>
-                <div className="flex justify-between mb-1"><label className={`text-xs font-bold tracking-widest text-cyan-400 ${fontClass}`}>{t.SCROLL_SPEED}</label><span className="text-xs font-mono text-white">{speedMod.toFixed(1)}x</span></div>
-                <input type="range" min="1.0" max="5.0" step="0.1" value={speedMod} onChange={(e) => setSpeedMod(parseFloat(e.target.value))} className="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
+                <div className="flex justify-between mb-2"><label className={`text-xs font-bold tracking-widest text-cyan-400 ${fontClass}`}>{t.SCROLL_SPEED}</label><span className="text-xs font-mono text-white">{speedMod.toFixed(1)}x</span></div>
+                <input type="range" min="1.0" max="5.0" step="0.1" value={speedMod} onChange={(e) => setSpeedMod(parseFloat(e.target.value))} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
             </div>
             
-            <button onClick={startCountdownSequence} onMouseEnter={() => playUiSound('hover')} disabled={isAnalyzing || !analyzedNotes} className={`w-full py-3 bg-gradient-to-r from-cyan-700 to-blue-700 text-white font-bold text-xl tracking-widest uppercase transition-all transform shadow-[0_0_30px_rgba(6,182,212,0.4)] border border-cyan-400/50 ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:from-cyan-600 hover:to-blue-600 hover:scale-[1.02] animate-pulse'} ${fontClass}`}>{isAnalyzing ? t.ANALYZING : t.GAME_START}</button>
+            <button onClick={startCountdownSequence} onMouseEnter={() => playUiSound('hover')} disabled={isAnalyzing || !analyzedNotes} className={`w-full py-4 bg-gradient-to-r from-cyan-700 to-blue-700 text-white font-bold text-2xl tracking-widest uppercase transition-all transform shadow-[0_0_30px_rgba(6,182,212,0.4)] border border-cyan-400/50 ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 cursor-not-allowed grayscale' : 'hover:from-cyan-600 hover:to-blue-600 hover:scale-[1.02] animate-pulse'} ${fontClass}`}>{isAnalyzing ? t.ANALYZING : t.GAME_START}</button>
           </div>
         </div>
       )}
