@@ -133,6 +133,9 @@ const App: React.FC = () => {
   const [isPlayingPreview, setIsPlayingPreview] = useState<boolean>(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Mobile Fullscreen State
+  const [showMobileStart, setShowMobileStart] = useState<boolean>(false);
 
   // Translations Helper
   const t = TRANSLATIONS[layoutSettings.language];
@@ -170,6 +173,35 @@ const App: React.FC = () => {
   // Visual State for React Render
   const [renderNotes, setRenderNotes] = useState<NoteType[]>([]);
 
+  // Detect Mobile on Mount
+  useEffect(() => {
+    const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (checkMobile) {
+        setShowMobileStart(true);
+    }
+  }, []);
+
+  const handleMobileEnter = () => {
+    // 1. Trigger Full Screen
+    const docEl = document.documentElement;
+    if (docEl.requestFullscreen) {
+        docEl.requestFullscreen().catch((err) => console.log("Fullscreen request denied", err));
+    } else if ((docEl as any).webkitRequestFullscreen) {
+        (docEl as any).webkitRequestFullscreen();
+    } else if ((docEl as any).webkitEnterFullscreen) {
+         (docEl as any).webkitEnterFullscreen();
+    }
+
+    // 2. Init Audio immediately on user interaction
+    initAudio();
+    
+    // 3. Play UI Sound
+    playUiSound('select');
+
+    // 4. Hide Overlay
+    setShowMobileStart(false);
+  };
+
   // Update ref and media volume when state changes
   useEffect(() => {
       audioSettingsRef.current = audioSettings;
@@ -190,7 +222,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (bgMusicRef.current) {
         // Only play BGM if in Title/Menu AND NOT playing a song preview
-        if ((status === GameStatus.TITLE || status === GameStatus.MENU) && !isPlayingPreview) {
+        if ((status === GameStatus.TITLE || status === GameStatus.MENU) && !isPlayingPreview && !showMobileStart) {
             bgMusicRef.current.play().catch(e => {
                 // Autoplay might be blocked until interaction
             });
@@ -201,7 +233,7 @@ const App: React.FC = () => {
             }
         }
     }
-  }, [status, isPlayingPreview]);
+  }, [status, isPlayingPreview, showMobileStart]);
 
   // Stop Preview Helper
   const stopPreview = () => {
@@ -240,6 +272,8 @@ const App: React.FC = () => {
             // Loop Logic: Play 15s, Fade out last 3s, Loop back to 0
             const LOOP_LIMIT = 15; // 15 seconds
             const FADE_START = 12; // Start fading at 12s
+
+            audio.loop = true; // Ensure basic looping is enabled
 
             previewTimeoutRef.current = setInterval(() => {
                 if (!audio) return;
@@ -391,7 +425,7 @@ const App: React.FC = () => {
     }
     // Also try to play BG music if it was blocked by autoplay policy
     if (bgMusicRef.current && (status === GameStatus.TITLE || status === GameStatus.MENU)) {
-        if (!isPlayingPreview) bgMusicRef.current.play().catch(()=>{});
+        if (!isPlayingPreview && !showMobileStart) bgMusicRef.current.play().catch(()=>{});
     }
     return audioCtxRef.current;
   };
@@ -688,11 +722,52 @@ const App: React.FC = () => {
     }
   }, [level, keyMode]);
 
-  const playHitSound = (laneIndex: number) => {
+  const playHitSound = (laneIndex: number | 'select' | 'hover') => {
     if (!audioCtxRef.current) return;
     const ctx = audioCtxRef.current;
     const t = ctx.currentTime;
     
+    // UI SOUNDS
+    if (laneIndex === 'hover') {
+          // Subtle blip
+          const gain = ctx.createGain();
+          const osc = ctx.createOscillator();
+          osc.frequency.setValueAtTime(400, t);
+          osc.frequency.exponentialRampToValueAtTime(200, t + 0.05);
+          gain.gain.setValueAtTime(getVol(0.05), t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+          osc.type = 'sine';
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.1);
+          return;
+    } 
+    
+    if (laneIndex === 'select') {
+          // SELECT: VINYL SCRATCH EFFECT
+          const gain = ctx.createGain();
+          const noise = ctx.createBufferSource();
+          noise.buffer = getNoiseBuffer(ctx);
+          noise.loop = true;
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.Q.value = 2.0;
+          filter.frequency.setValueAtTime(400, t);
+          filter.frequency.linearRampToValueAtTime(1500, t + 0.05);
+          filter.frequency.linearRampToValueAtTime(100, t + 0.15);
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(getVol(0.6), t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+          noise.connect(filter);
+          filter.connect(gain);
+          gain.connect(ctx.destination);
+          noise.start(t);
+          noise.stop(t + 0.2);
+          return;
+    }
+
+    // GAMEPLAY SOUNDS
     // Determine note type (Kick, Snare, Hi-hat) based on lane
     let isKick = false;
     let isSnare = false;
@@ -1614,6 +1689,23 @@ const App: React.FC = () => {
   return (
     <div className={`relative w-full h-screen bg-black overflow-hidden text-slate-100 select-none ${isShaking ? 'animate-[shake_0.2s_ease-in-out]' : ''}`}>
       
+      {/* MOBILE ENTRY OVERLAY */}
+      {showMobileStart && (
+         <div className="absolute inset-0 z-[100] bg-black flex flex-col items-center justify-center p-8 text-center cursor-pointer" onClick={handleMobileEnter}>
+            <div className="relative w-24 h-24 mb-8">
+                 <div className="absolute inset-0 border-4 border-cyan-500 rounded-full animate-ping opacity-50"></div>
+                 <div className="absolute inset-0 border-4 border-cyan-400 rounded-full flex items-center justify-center bg-cyan-900/20 backdrop-blur-md">
+                     <span className="text-3xl">👆</span>
+                 </div>
+            </div>
+            <h1 className="text-3xl font-black italic text-white mb-2 animate-pulse tracking-widest font-display">SYSTEM INITIALIZE</h1>
+            <p className="text-cyan-400 font-mono text-sm tracking-[0.2em] mb-12">TOUCH SCREEN TO START</p>
+            <div className="text-xs text-slate-600 font-mono border border-slate-800 px-4 py-2 rounded">
+                FULLSCREEN MODE REQUIRED
+            </div>
+         </div>
+      )}
+
       {/* BACKGROUND MUSIC ELEMENT */}
       <audio ref={bgMusicRef} src="/musicbg.mp3" loop />
 
@@ -1631,8 +1723,10 @@ const App: React.FC = () => {
                             loop
                             muted
                             playsInline
+                            // @ts-ignore
                             webkit-playsinline="true"
-                            className="absolute inset-0 w-full h-full object-cover"
+                            disablePictureInPicture
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none touch-none"
                         />
                         <div className="absolute inset-0 led-screen-filter"></div>
                     </>
@@ -1649,10 +1743,12 @@ const App: React.FC = () => {
                     <video
                         ref={mediaRef as React.RefObject<HTMLVideoElement>}
                         src={localVideoSrc}
-                        className="absolute inset-0 w-full h-full object-cover z-20"
+                        className="absolute inset-0 w-full h-full object-cover z-20 pointer-events-none touch-none"
                         onEnded={triggerOutro}
                         playsInline
+                        // @ts-ignore
                         webkit-playsinline="true"
+                        disablePictureInPicture
                     />
                 ) : (
                     // Audio Mode
@@ -1672,7 +1768,7 @@ const App: React.FC = () => {
       <div className="scanlines z-50 pointer-events-none opacity-40"></div>
       
       {/* TOP RIGHT BGM TOGGLE (MOVED TO BOTTOM RIGHT) */}
-      {(status === GameStatus.TITLE || status === GameStatus.MENU) && (
+      {(status === GameStatus.TITLE || status === GameStatus.MENU) && !showMobileStart && (
         <button 
             onClick={() => setIsBgMusicMuted(!isBgMusicMuted)}
             className="absolute bottom-4 right-4 z-[70] p-2 bg-black/50 hover:bg-black/80 text-cyan-400 border border-cyan-500 rounded-full transition-all active:scale-95"
@@ -1746,7 +1842,7 @@ const App: React.FC = () => {
       )}
 
       {/* TITLE SCREEN & MAIN MENU */}
-      {status === GameStatus.TITLE && (
+      {status === GameStatus.TITLE && !showMobileStart && (
           <div className="relative z-30 h-full w-full flex flex-col items-center justify-center overflow-hidden">
               
               {/* VISUALS (Background Rings) - Centered */}
