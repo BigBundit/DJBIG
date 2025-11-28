@@ -196,8 +196,12 @@ const App: React.FC = () => {
     // 2. Init Audio immediately on user interaction
     initAudio();
     
-    // 3. Play UI Sound
+    // 3. Play UI Sound AND PRIME VIBRATION
     playUiSound('select');
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        // Short vibration to unlock the haptic engine on mobile browsers/webviews
+        navigator.vibrate(200);
+    }
 
     // 4. Hide Overlay
     setShowMobileStart(false);
