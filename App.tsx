@@ -1927,8 +1927,8 @@ const App: React.FC = () => {
       {status === GameStatus.MENU && !startCountdown && (
         <div className="relative z-30 w-full h-full md:h-full flex flex-col md:flex-row animate-fade-in bg-slate-900/40 backdrop-blur-md overflow-y-auto md:overflow-hidden">
           
-          {/* HEADER BAR (MOBILE) */}
-          <div className="md:hidden sticky top-0 left-0 w-full h-16 bg-slate-900 flex items-center justify-between px-4 z-50 border-b border-slate-700 shrink-0">
+          {/* HEADER BAR (MOBILE) - ADDED SAFE AREA PADDING AND MIN HEIGHT */}
+          <div className="md:hidden sticky top-0 left-0 w-full min-h-[4rem] bg-slate-900 flex items-center justify-between px-4 z-50 border-b border-slate-700 shrink-0 pt-[max(2rem,env(safe-area-inset-top))] pb-2">
              <button onClick={() => { setStatus(GameStatus.TITLE); stopPreview(); }} className="text-white">← BACK</button>
              <div className="text-cyan-400 font-bold">MUSIC SELECT</div>
           </div>

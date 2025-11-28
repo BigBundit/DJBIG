@@ -304,19 +304,22 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                          <div className="relative z-10 flex-1 flex flex-col">
                             <div className="flex items-center justify-between border-b-2 border-slate-700 pb-4 mb-6">
                                 <h3 className={`text-2xl text-white font-black italic tracking-widest ${fontClass}`}>{t.CONTROLS}</h3>
-                                <div className="flex space-x-2">
+                                <div className="flex flex-wrap gap-2">
                                     {[4, 5, 7].map((mode) => (
                                         <button
                                             key={mode}
                                             onClick={() => { onPlaySound('select'); setActiveMode(mode as 4|5|7); setBindingIndex(null); }}
                                             className={`
-                                                px-4 py-1 text-sm font-bold font-display skew-x-[-10deg] transition-all border
+                                                px-2 md:px-4 py-1 text-sm font-bold font-display skew-x-[-10deg] transition-all border
                                                 ${activeMode === mode 
                                                     ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_15px_cyan]' 
                                                     : 'bg-slate-800 border-slate-600 text-slate-500 hover:text-white hover:border-slate-400'}
                                             `}
                                         >
-                                            <span className="skew-x-[10deg] inline-block">{mode}K MODE</span>
+                                            <span className="skew-x-[10deg] inline-block">
+                                                <span className="md:hidden">{mode}K</span>
+                                                <span className="hidden md:inline">{mode}K MODE</span>
+                                            </span>
                                         </button>
                                     ))}
                                 </div>
