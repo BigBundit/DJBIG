@@ -482,11 +482,17 @@ const App: React.FC = () => {
     setLocalFileName(id);
     setAnalyzedNotes(null); // Reset previous
     
+    // Determine title
+    let demoTitle = t.PLAY_DEMO_01;
+    if (id === 'DEMO_TRACK_02') demoTitle = t.PLAY_DEMO_02;
+    if (id === 'DEMO_TRACK_03') demoTitle = t.PLAY_DEMO_03;
+    if (id === 'DEMO_TRACK_04') demoTitle = t.PLAY_DEMO_04;
+
     // Set Metadata for UI
     setCurrentSongMetadata({
         id: id,
         file: new File([], id), // Mock file
-        name: id === 'DEMO_TRACK_01' ? t.PLAY_DEMO_01 : t.PLAY_DEMO_02,
+        name: demoTitle,
         thumbnailUrl: null,
         type: 'video'
     });
@@ -1886,6 +1892,52 @@ const App: React.FC = () => {
                      {localFileName === "DEMO_TRACK_02" && <div className="text-amber-400 text-xl animate-pulse">◀</div>}
                  </div>
 
+                 {/* Item 3: Demo 03 */}
+                 <div 
+                    onClick={() => loadDemoTrack('/demoplay03.mp4', 'DEMO_TRACK_03')}
+                    onMouseEnter={() => playUiSound('hover')}
+                    className={`
+                        group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden
+                        ${localFileName === "DEMO_TRACK_03" 
+                            ? 'bg-gradient-to-r from-purple-900/80 to-transparent border-purple-400' 
+                            : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-purple-600'}
+                    `}
+                    style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}
+                 >
+                     <div className={`font-black text-2xl mr-4 ${localFileName === "DEMO_TRACK_03" ? 'text-purple-400' : 'text-slate-700 group-hover:text-purple-800'}`}>03</div>
+                     <div className="flex-1 min-w-0">
+                         <MarqueeText 
+                             text={t.PLAY_DEMO_03} 
+                             className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_03" ? 'text-white' : 'text-slate-400 group-hover:text-purple-200'}`}
+                         />
+                         <div className="text-xs font-mono text-purple-600/70">ELECTRONIC CORE // 150 BPM</div>
+                     </div>
+                     {localFileName === "DEMO_TRACK_03" && <div className="text-purple-400 text-xl animate-pulse">◀</div>}
+                 </div>
+
+                 {/* Item 4: Demo 04 */}
+                 <div 
+                    onClick={() => loadDemoTrack('/demoplay04.mp4', 'DEMO_TRACK_04')}
+                    onMouseEnter={() => playUiSound('hover')}
+                    className={`
+                        group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden
+                        ${localFileName === "DEMO_TRACK_04" 
+                            ? 'bg-gradient-to-r from-rose-900/80 to-transparent border-rose-400' 
+                            : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-rose-600'}
+                    `}
+                    style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}
+                 >
+                     <div className={`font-black text-2xl mr-4 ${localFileName === "DEMO_TRACK_04" ? 'text-rose-400' : 'text-slate-700 group-hover:text-rose-800'}`}>04</div>
+                     <div className="flex-1 min-w-0">
+                         <MarqueeText 
+                             text={t.PLAY_DEMO_04} 
+                             className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_04" ? 'text-white' : 'text-slate-400 group-hover:text-rose-200'}`}
+                         />
+                         <div className="text-xs font-mono text-rose-600/70">CYBER PUNK ROCK // 160 BPM</div>
+                     </div>
+                     {localFileName === "DEMO_TRACK_04" && <div className="text-rose-400 text-xl animate-pulse">◀</div>}
+                 </div>
+
                  {/* Loaded Songs */}
                  {songList.map((song, idx) => {
                      const isActive = localFileName === song.name;
@@ -1902,7 +1954,7 @@ const App: React.FC = () => {
                             `}
                             style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}
                         >
-                            <div className={`font-black text-2xl mr-4 ${isActive ? 'text-cyan-400' : 'text-slate-700 group-hover:text-cyan-800'}`}>{(idx + 3).toString().padStart(2, '0')}</div>
+                            <div className={`font-black text-2xl mr-4 ${isActive ? 'text-cyan-400' : 'text-slate-700 group-hover:text-cyan-800'}`}>{(idx + 5).toString().padStart(2, '0')}</div>
                             <div className="flex-1 min-w-0 overflow-hidden">
                                 <MarqueeText 
                                     text={song.name} 
