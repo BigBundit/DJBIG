@@ -82,6 +82,7 @@ export interface AudioSettings {
     masterVolume: number;
     sfxVolume: number;
     musicVolume: number;
+    audioOffset: number;
 }
 
 export interface LayoutSettings {
