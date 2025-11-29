@@ -69,6 +69,14 @@ const MarqueeText: React.FC<{ text: string, className?: string }> = ({ text, cla
     return <div className={`truncate ${className}`}>{text}</div>;
 };
 
+// HELPER: Convert Key Code to readable label
+const codeToLabel = (code: string) => {
+    if (code === 'Space') return 'SPC';
+    if (code.startsWith('Key')) return code.replace('Key', '');
+    if (code.startsWith('Digit')) return code.replace('Digit', '');
+    return code.toUpperCase().slice(0,3);
+};
+
 const App: React.FC = () => {
   // Game State
   const [status, setStatus] = useState<GameStatus>(GameStatus.TITLE);
@@ -325,7 +333,17 @@ const App: React.FC = () => {
       // Keys
       const storedKeys = localStorage.getItem('djbig_key_config');
       if (storedKeys) {
-          try { setKeyMappings(JSON.parse(storedKeys)); } catch (e) { console.error("Failed to load keys", e); }
+          try { 
+              const parsed = JSON.parse(storedKeys);
+              // MIGRATION: Check if using old single-char keys (Legacy)
+              // If the first key in 4k mode is length 1 (e.g. 'd' instead of 'KeyD'), it needs update
+              if (parsed[4] && parsed[4].length > 0 && parsed[4][0].length === 1) {
+                   // Migrate to new defaults
+                   setKeyMappings(DEFAULT_KEY_MAPPINGS);
+              } else {
+                   setKeyMappings(parsed);
+              }
+          } catch (e) { console.error("Failed to load keys", e); }
       }
 
       // Stats
@@ -412,7 +430,7 @@ const App: React.FC = () => {
       return baseConfig.map((lane, idx) => ({
           ...lane,
           key: currentKeys[idx] || lane.key, // Fallback if something is wrong
-          label: currentKeys[idx] === ' ' ? 'SPC' : currentKeys[idx].toUpperCase()
+          label: codeToLabel(currentKeys[idx] || lane.key) // Convert Code to Label (KeyS -> S)
       }));
   }, [keyMode, keyMappings]);
 
@@ -1255,7 +1273,7 @@ const App: React.FC = () => {
 
     if (status === GameStatus.MENU || status === GameStatus.TITLE) {
         // Just play sound if pressing keys in menu for fun
-        const laneIndex = activeLaneConfig.findIndex(l => l.key === e.key.toLowerCase());
+        const laneIndex = activeLaneConfig.findIndex(l => l.key === e.code); // Use e.code (Physical Key)
         if (laneIndex !== -1 && activeLaneConfig.length > 0 && audioCtxRef.current) {
             playHitSound(laneIndex);
         }
@@ -1291,14 +1309,16 @@ const App: React.FC = () => {
         return;
     }
 
-    const laneIndex = activeLaneConfig.findIndex(l => l.key === e.key.toLowerCase());
+    // USE PHYSICAL KEY CODE
+    const laneIndex = activeLaneConfig.findIndex(l => l.key === e.code);
     if (laneIndex !== -1) {
         triggerLane(laneIndex);
     }
   }, [status, triggerLane, triggerOutro, togglePause, isAutoPlay, activeLaneConfig, showKeyConfig, showThemeMenu]);
 
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
-    const laneIndex = activeLaneConfig.findIndex(l => l.key === e.key.toLowerCase());
+    // USE PHYSICAL KEY CODE
+    const laneIndex = activeLaneConfig.findIndex(l => l.key === e.code);
     if (laneIndex !== -1) {
         releaseLane(laneIndex);
     }
@@ -1692,6 +1712,12 @@ const App: React.FC = () => {
     }
   };
 
+  const getPositionClass = () => {
+    if (layoutSettings.lanePosition === 'left') return 'justify-start';
+    if (layoutSettings.lanePosition === 'right') return 'justify-end';
+    return 'justify-center';
+  };
+
   return (
     <div className={`fixed inset-0 w-full h-[100dvh] bg-black overflow-hidden text-slate-100 select-none touch-none ${isShaking ? 'animate-[shake_0.2s_ease-in-out]' : ''}`}>
       
@@ -1946,6 +1972,8 @@ const App: React.FC = () => {
 
           {/* LEFT COLUMN: THE PLAYLIST */}
           <div className="w-full md:w-[55%] h-auto md:h-full flex flex-col bg-slate-950/80 border-r border-slate-700/50 pt-0 md:pt-0 relative shrink-0 md:overflow-hidden">
+             {/* ... (Playlist code remains same as previous but needs to be included in full file return) ... */}
+             {/* For brevity, assuming the rest of the playlist rendering code is identical to previous, just wrapped in the App component structure */}
              
              {/* Header */}
              <div className="hidden md:flex h-24 items-end pb-4 px-8 border-b border-cyan-500/30 bg-gradient-to-b from-slate-900 to-transparent shrink-0">
@@ -2249,7 +2277,7 @@ const App: React.FC = () => {
 
       {/* GAMEPLAY UI */}
       {(status === GameStatus.PLAYING || status === GameStatus.PAUSED) && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center">
+          <div className={`absolute inset-0 z-40 flex items-center ${getPositionClass()}`}>
               {renderGameFrame()}
           </div>
       )}

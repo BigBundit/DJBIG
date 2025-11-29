@@ -35,38 +35,39 @@ const COLOR_YELLOW = {
     noteShadow: 'shadow-[0_0_15px_rgba(250,204,21,0.8)]'
 };
 
+// UPDATED TO USE PHYSICAL KEY CODES
 export const DEFAULT_KEY_MAPPINGS: KeyMapping = {
-    4: ['d', 'f', 'j', 'k'],
-    5: ['d', 'f', ' ', 'j', 'k'],
-    7: ['s', 'd', 'f', ' ', 'j', 'k', 'l']
+    4: ['KeyD', 'KeyF', 'KeyJ', 'KeyK'],
+    5: ['KeyD', 'KeyF', 'Space', 'KeyJ', 'KeyK'],
+    7: ['KeyS', 'KeyD', 'KeyF', 'Space', 'KeyJ', 'KeyK', 'KeyL']
 };
 
 // 4 KEYS: D, F, J, K
 export const LANE_CONFIGS_4: LaneConfig[] = [
-    { index: 0, key: 'd', label: 'D', color: COLOR_FUCHSIA },
-    { index: 1, key: 'f', label: 'F', color: COLOR_CYAN },
-    { index: 2, key: 'j', label: 'J', color: COLOR_CYAN },
-    { index: 3, key: 'k', label: 'K', color: COLOR_FUCHSIA },
+    { index: 0, key: 'KeyD', label: 'D', color: COLOR_FUCHSIA },
+    { index: 1, key: 'KeyF', label: 'F', color: COLOR_CYAN },
+    { index: 2, key: 'KeyJ', label: 'J', color: COLOR_CYAN },
+    { index: 3, key: 'KeyK', label: 'K', color: COLOR_FUCHSIA },
 ];
 
 // 5 KEYS: D, F, SPACE, J, K
 export const LANE_CONFIGS_5: LaneConfig[] = [
-    { index: 0, key: 'd', label: 'D', color: COLOR_FUCHSIA },
-    { index: 1, key: 'f', label: 'F', color: COLOR_CYAN },
-    { index: 2, key: ' ', label: 'SPC', color: COLOR_YELLOW },
-    { index: 3, key: 'j', label: 'J', color: COLOR_CYAN },
-    { index: 4, key: 'k', label: 'K', color: COLOR_FUCHSIA },
+    { index: 0, key: 'KeyD', label: 'D', color: COLOR_FUCHSIA },
+    { index: 1, key: 'KeyF', label: 'F', color: COLOR_CYAN },
+    { index: 2, key: 'Space', label: 'SPC', color: COLOR_YELLOW },
+    { index: 3, key: 'KeyJ', label: 'J', color: COLOR_CYAN },
+    { index: 4, key: 'KeyK', label: 'K', color: COLOR_FUCHSIA },
 ];
 
 // 7 KEYS: S, D, F, SPACE, J, K, L
 export const LANE_CONFIGS_7: LaneConfig[] = [
-    { index: 0, key: 's', label: 'S', color: COLOR_CYAN },
-    { index: 1, key: 'd', label: 'D', color: COLOR_FUCHSIA },
-    { index: 2, key: 'f', label: 'F', color: COLOR_CYAN },
-    { index: 3, key: ' ', label: 'SPC', color: COLOR_YELLOW },
-    { index: 4, key: 'j', label: 'J', color: COLOR_CYAN },
-    { index: 5, key: 'k', label: 'K', color: COLOR_FUCHSIA },
-    { index: 6, key: 'l', label: 'L', color: COLOR_CYAN },
+    { index: 0, key: 'KeyS', label: 'S', color: COLOR_CYAN },
+    { index: 1, key: 'KeyD', label: 'D', color: COLOR_FUCHSIA },
+    { index: 2, key: 'KeyF', label: 'F', color: COLOR_CYAN },
+    { index: 3, key: 'Space', label: 'SPC', color: COLOR_YELLOW },
+    { index: 4, key: 'KeyJ', label: 'J', color: COLOR_CYAN },
+    { index: 5, key: 'KeyK', label: 'K', color: COLOR_FUCHSIA },
+    { index: 6, key: 'KeyL', label: 'L', color: COLOR_CYAN },
 ];
 
 // --- THEMES ---

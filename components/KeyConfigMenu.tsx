@@ -50,15 +50,23 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
         return LANE_CONFIGS_7;
     };
 
+    // Helper to format Key Codes to Labels
+    const codeToLabel = (code: string) => {
+        if (code === 'Space') return 'SPC';
+        if (code.startsWith('Key')) return code.replace('Key', '');
+        if (code.startsWith('Digit')) return code.replace('Digit', '');
+        return code.toUpperCase().slice(0,3);
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
         if (bindingIndex !== null) {
             e.preventDefault();
             e.stopPropagation();
 
-            const newKey = e.key.toLowerCase();
+            const newKeyCode = e.code; // Use Code instead of Key
             const currentKeys = localMappings[activeMode];
             const newKeys = [...currentKeys];
-            newKeys[bindingIndex] = newKey === ' ' ? ' ' : newKey;
+            newKeys[bindingIndex] = newKeyCode;
 
             setLocalMappings(prev => ({
                 ...prev,
@@ -84,9 +92,9 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
     const resetToDefault = () => {
          onPlaySound('select');
          setLocalMappings({
-            4: ['d', 'f', 'j', 'k'],
-            5: ['d', 'f', ' ', 'j', 'k'],
-            7: ['s', 'd', 'f', ' ', 'j', 'k', 'l']
+            4: ['KeyD', 'KeyF', 'KeyJ', 'KeyK'],
+            5: ['KeyD', 'KeyF', 'Space', 'KeyJ', 'KeyK'],
+            7: ['KeyS', 'KeyD', 'KeyF', 'Space', 'KeyJ', 'KeyK', 'KeyL']
          });
     };
 
@@ -335,7 +343,9 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                 <div className="flex items-end justify-center w-full h-40 gap-1 md:gap-2">
                                     {activeConfig.map((lane, idx) => {
                                         const isBinding = bindingIndex === idx;
-                                        const keyLabel = currentBoundKeys[idx] === ' ' ? 'SPC' : currentBoundKeys[idx].toUpperCase();
+                                        // Use codeToLabel for display
+                                        const keyCode = currentBoundKeys[idx];
+                                        const keyLabel = codeToLabel(keyCode || lane.key);
                                         
                                         return (
                                             <button 
