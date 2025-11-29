@@ -28,7 +28,6 @@ import { Note } from './components/Note';
 import { PauseMenu } from './components/PauseMenu';
 import { HitEffect } from './components/HitEffect';
 import { KeyConfigMenu } from './components/KeyConfigMenu';
-import { ThemeSelectionMenu } from './components/ThemeSelectionMenu';
 import { analyzeAudioAndGenerateNotes } from './utils/audioAnalyzer';
 import { generateVideoThumbnail, bufferToWave } from './utils/mediaUtils';
 import { generateRockDemo } from './utils/demoAudio';
@@ -125,7 +124,6 @@ const App: React.FC = () => {
   const [keyMode, setKeyMode] = useState<4 | 5 | 7>(7);
   const [keyMappings, setKeyMappings] = useState<KeyMapping>(DEFAULT_KEY_MAPPINGS);
   const [showKeyConfig, setShowKeyConfig] = useState<boolean>(false);
-  const [showThemeMenu, setShowThemeMenu] = useState<boolean>(false);
 
   // Audio Settings
   const [audioSettings, setAudioSettings] = useState<AudioSettings>({ masterVolume: 0.5, sfxVolume: 1.0, musicVolume: 0.5, audioOffset: 0 });
@@ -136,7 +134,6 @@ const App: React.FC = () => {
 
   // Theme & Progress System
   const [currentThemeId, setCurrentThemeId] = useState<ThemeId>('ignore');
-  const [unlockedThemes, setUnlockedThemes] = useState<Set<ThemeId>>(new Set(['neon', 'ignore', 'titan', 'queen']));
   const [playerStats, setPlayerStats] = useState<PlayerStats>(DEFAULT_STATS);
 
   // Preview Audio State
@@ -165,6 +162,10 @@ const App: React.FC = () => {
   
   const notesRef = useRef<NoteType[]>([]);
   const activeKeysRef = useRef<boolean[]>(new Array(7).fill(false)); // Max 7
+  
+  // VISUAL STATE: Tracks key press visuals separately to force re-renders immediately
+  const [activeLanesState, setActiveLanesState] = useState<boolean[]>(new Array(7).fill(false));
+
   const mediaRef = useRef<HTMLMediaElement>(null); // Ref for audio/video playback
   const bgVideoRef = useRef<HTMLVideoElement>(null); // Ref for background video loop
   const bgMusicRef = useRef<HTMLAudioElement>(null); // Ref for background music (Intro)
@@ -410,19 +411,6 @@ const App: React.FC = () => {
           try { setPlayerStats(JSON.parse(storedStats)); } catch (e) { console.error("Failed to load stats", e); }
       }
 
-      const defaultUnlocks = ['neon', 'ignore', 'titan', 'queen'];
-      const storedUnlocks = localStorage.getItem('djbig_unlocked_themes');
-      if (storedUnlocks) {
-          try { 
-              const parsed = JSON.parse(storedUnlocks);
-              setUnlockedThemes(new Set([...defaultUnlocks, ...parsed]));
-          } catch(e) {
-              setUnlockedThemes(new Set(defaultUnlocks as ThemeId[]));
-          }
-      } else {
-          setUnlockedThemes(new Set(defaultUnlocks as ThemeId[]));
-      }
-
       const storedActiveTheme = localStorage.getItem('djbig_active_theme');
       if (storedActiveTheme && ['neon', 'ignore', 'titan', 'queen'].includes(storedActiveTheme)) {
           setCurrentThemeId(storedActiveTheme as ThemeId);
@@ -447,12 +435,6 @@ const App: React.FC = () => {
   const handleLayoutChange = (newLayout: LayoutSettings) => {
       setLayoutSettings(newLayout);
       localStorage.setItem('djbig_layout_settings', JSON.stringify(newLayout));
-  };
-
-  const handleSelectTheme = (id: ThemeId) => {
-      setCurrentThemeId(id);
-      localStorage.setItem('djbig_active_theme', id);
-      playUiSound('select');
   };
 
   const activeThemeObj = useMemo(() => {
@@ -903,8 +885,16 @@ const App: React.FC = () => {
   const triggerLane = useCallback((laneIndex: number) => {
     if (status !== GameStatus.PLAYING || isAutoPlay) return; 
     
+    // 1. Game Logic (Fast Ref)
     if (activeKeysRef.current[laneIndex]) return;
     activeKeysRef.current[laneIndex] = true;
+
+    // 2. Visual Update (Forces Re-render immediately)
+    setActiveLanesState(prev => {
+        const next = [...prev];
+        next[laneIndex] = true;
+        return next;
+    });
 
     playHitSound(laneIndex);
 
@@ -974,6 +964,11 @@ const App: React.FC = () => {
 
   const releaseLane = useCallback((laneIndex: number) => {
     activeKeysRef.current[laneIndex] = false;
+    setActiveLanesState(prev => {
+        const next = [...prev];
+        next[laneIndex] = false;
+        return next;
+    });
   }, []);
 
   const handleTouch = useCallback((e: React.TouchEvent) => {
@@ -1071,8 +1066,12 @@ const App: React.FC = () => {
       if (isAutoPlay && !note.hit && !note.missed) {
           if (timeDelta >= 0) {
             note.hit = true;
-            activeKeysRef.current[note.laneIndex] = true;
-            setTimeout(() => { activeKeysRef.current[note.laneIndex] = false; }, 50);
+            // Visual feedback for autoplay
+            setActiveLanesState(prev => { const n = [...prev]; n[note.laneIndex] = true; return n; });
+            setTimeout(() => { 
+                setActiveLanesState(prev => { const n = [...prev]; n[note.laneIndex] = false; return n; });
+            }, 50);
+            
             playHitSound(note.laneIndex);
             setHitEffects(prev => [...prev, { id: Date.now() + Math.random(), laneIndex: note.laneIndex, rating: ScoreRating.PERFECT, timestamp: performance.now() }]);
             setFeedback({ text: t.AUTO_PILOT, color: "text-fuchsia-500", id: Date.now() });
@@ -1125,7 +1124,7 @@ const App: React.FC = () => {
   // ... (Input Handling: handleExit, handleKeyDown, handleKeyUp - Identical) ...
   const handleExit = () => { try { window.close(); } catch (e) {} window.location.href = "about:blank"; };
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if ((showKeyConfig || showThemeMenu) && e.key === 'Escape') { setShowKeyConfig(false); setShowThemeMenu(false); return; }
+    if ((showKeyConfig) && e.key === 'Escape') { setShowKeyConfig(false); return; }
     if (e.key === 'Escape') {
         if (status === GameStatus.TITLE) { handleExit(); } 
         else if (status === GameStatus.MENU) { setStatus(GameStatus.TITLE); playUiSound('select'); } 
@@ -1144,7 +1143,7 @@ const App: React.FC = () => {
     if (e.key === 'F9') { e.preventDefault(); triggerOutro(); return; }
     const laneIndex = activeLaneConfig.findIndex(l => l.key === e.code);
     if (laneIndex !== -1) triggerLane(laneIndex);
-  }, [status, triggerLane, triggerOutro, togglePause, isAutoPlay, activeLaneConfig, showKeyConfig, showThemeMenu]);
+  }, [status, triggerLane, triggerOutro, togglePause, isAutoPlay, activeLaneConfig, showKeyConfig]);
 
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
     const laneIndex = activeLaneConfig.findIndex(l => l.key === e.code);
@@ -1198,9 +1197,12 @@ const App: React.FC = () => {
     }
 
     activeKeysRef.current = new Array(keyMode).fill(false);
+    setActiveLanesState(new Array(keyMode).fill(false)); // Reset visual state
     setScore(0); setCombo(0); setMaxCombo(0); setHealth(100);
     setMissCount(0); setPerfectCount(0); setGoodCount(0);
     setHitEffects([]); setIsAutoPlay(false);
+    setFeedback(null); // RESET FEEDBACK
+    setIsShaking(false); // RESET SHAKE
     totalPauseDurationRef.current = 0;
     
     setStatus(GameStatus.PLAYING);
@@ -1237,7 +1239,7 @@ const App: React.FC = () => {
              <div ref={progressBarRef} className="h-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.8)]" style={{ width: '0%' }}></div>
         </div>
         {activeLaneConfig.map((lane, index) => (
-            <Lane key={index} config={lane} active={activeKeysRef.current[index]} onTrigger={() => triggerLane(index)} onRelease={() => releaseLane(index)} theme={activeThemeObj} />
+            <Lane key={index} config={lane} active={activeLanesState[index]} onTrigger={() => triggerLane(index)} onRelease={() => releaseLane(index)} theme={activeThemeObj} />
         ))}
         <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none z-10"></div>
         {currentThemeId !== 'ignore' && (
@@ -1356,7 +1358,6 @@ const App: React.FC = () => {
       )}
 
       {showKeyConfig && ( <KeyConfigMenu currentKeyMode={keyMode} mappings={keyMappings} audioSettings={audioSettings} onAudioSettingsChange={setAudioSettings} layoutSettings={layoutSettings} onLayoutSettingsChange={handleLayoutChange} onSave={saveKeyMappings} onClose={() => setShowKeyConfig(false)} onPlaySound={playUiSound} t={t} fontClass={fontClass} /> )}
-      {showThemeMenu && ( <ThemeSelectionMenu unlockedThemes={unlockedThemes} currentTheme={currentThemeId} onSelectTheme={handleSelectTheme} onClose={() => setShowThemeMenu(false)} onPlaySound={playUiSound} t={t} fontClass={fontClass} /> )}
       {startCountdown !== null && ( <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"><div className="text-[15rem] font-black font-display text-cyan-400 animate-ping">{startCountdown}</div></div> )}
       
       {status === GameStatus.OUTRO && (
@@ -1374,7 +1375,6 @@ const App: React.FC = () => {
               <div className="relative z-10 text-center transform hover:scale-105 transition-transform duration-500 cursor-default mb-12 mt-[-100px]"><div className="flex items-end justify-center leading-none mb-4 animate-pulse"><span className="text-8xl md:text-[10rem] font-black font-display text-white italic drop-shadow-[5px_5px_0px_rgba(6,182,212,1)] tracking-tighter" style={{textShadow: '4px 4px 0px #0891b2'}}>DJ</span><span className="text-8xl md:text-[10rem] font-black font-display text-cyan-400 italic drop-shadow-[0_0_30px_rgba(34,211,238,0.8)] ml-2" style={{textShadow: '0 0 20px cyan'}}>BIG</span></div><div className="inline-block bg-black/80 px-4 py-1 border-x-2 border-cyan-500 backdrop-blur-sm"><p className={`text-cyan-200 font-bold tracking-[0.5em] text-sm md:text-xl font-display uppercase`}>CYBER RHYTHM ACTION</p></div></div>
               <div className="flex flex-col items-center space-y-4 w-full max-w-md z-20">
                   <button onClick={() => { setStatus(GameStatus.MENU); playUiSound('select'); initAudio(); }} onMouseEnter={() => playUiSound('hover')} className="group relative w-80 h-20 bg-gradient-to-r from-cyan-900/80 via-cyan-600 to-cyan-900/80 border-x-4 border-cyan-400 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.3)]"><div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-20 transition-opacity"></div><div className="flex flex-col items-center justify-center h-full transform skew-x-12"><span className={`text-3xl font-black italic text-white group-hover:text-cyan-100 ${fontClass}`}>{t.START}</span><span className="text-[10px] font-mono text-cyan-300 tracking-[0.3em]">INITIATE SEQUENCE</span></div></button>
-                  <button onClick={() => { setShowThemeMenu(true); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className="group relative w-64 h-14 bg-gradient-to-r from-slate-800/80 via-purple-900 to-slate-800/80 border-x-4 border-purple-500 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden"><div className="flex flex-col items-center justify-center h-full transform skew-x-12"><span className={`text-xl font-bold text-slate-300 group-hover:text-purple-200 ${fontClass}`}>{t.CUSTOMIZE}</span></div></button>
                   <button onClick={() => { setShowKeyConfig(true); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className="group relative w-64 h-14 bg-gradient-to-r from-slate-800/80 via-yellow-900 to-slate-800/80 border-x-4 border-yellow-500 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden"><div className="flex flex-col items-center justify-center h-full transform skew-x-12"><span className={`text-xl font-bold text-slate-300 group-hover:text-yellow-200 ${fontClass}`}>{t.SETTING}</span></div></button>
                   <button onClick={() => window.location.reload()} onMouseEnter={() => playUiSound('hover')} className="group relative w-64 h-14 bg-gradient-to-r from-slate-800/80 via-red-900 to-slate-800/80 border-x-4 border-red-500 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden"><div className="flex flex-col items-center justify-center h-full transform skew-x-12"><span className={`text-lg font-bold text-slate-300 group-hover:text-red-200 ${fontClass}`}>{t.EXIT}</span></div></button>
                </div>
@@ -1413,7 +1413,7 @@ const App: React.FC = () => {
              </div>
           </div>
           <div className="w-full md:w-[45%] h-auto md:h-full relative flex flex-col p-4 md:p-6 justify-between shrink-0 md:overflow-hidden pb-32 md:pb-6">
-             <div className="hidden md:flex w-full justify-between items-start mb-4 z-20 shrink-0"><button onClick={() => { setStatus(GameStatus.TITLE); playUiSound('select'); stopPreview(); }} className="flex items-center space-x-2 text-slate-500 hover:text-white transition-colors group"><div className="w-8 h-8 rounded-full border border-slate-600 group-hover:border-white flex items-center justify-center">←</div><span className={`font-bold tracking-widest ${fontClass}`}>{t.BACK}</span></button><div className="flex space-x-4"><button onClick={() => { setShowThemeMenu(true); playUiSound('select'); }} className="text-slate-500 hover:text-purple-400 font-bold text-sm tracking-widest">{t.CUSTOMIZE}</button><button onClick={() => { setShowKeyConfig(true); playUiSound('select'); }} className="text-slate-500 hover:text-yellow-400 font-bold text-sm tracking-widest">{t.SETTING}</button></div></div>
+             <div className="hidden md:flex w-full justify-between items-start mb-4 z-20 shrink-0"><button onClick={() => { setStatus(GameStatus.TITLE); playUiSound('select'); stopPreview(); }} className="flex items-center space-x-2 text-slate-500 hover:text-white transition-colors group"><div className="w-8 h-8 rounded-full border border-slate-600 group-hover:border-white flex items-center justify-center">←</div><span className={`font-bold tracking-widest ${fontClass}`}>{t.BACK}</span></button><div className="flex space-x-4"><button onClick={() => { setShowKeyConfig(true); playUiSound('select'); }} className="text-slate-500 hover:text-yellow-400 font-bold text-sm tracking-widest">{t.SETTING}</button></div></div>
              <div className="hidden md:flex absolute inset-0 items-center justify-center opacity-30 pointer-events-none z-0"><div className="w-[80vw] h-[80vw] md:w-[600px] md:h-[600px] border border-cyan-500/20 rounded-full animate-[spin_60s_linear_infinite] border-dashed"></div><div className="absolute w-[60vw] h-[60vw] md:w-[450px] md:h-[450px] border border-white/5 rounded-full animate-[spin-ccw_40s_linear_infinite]"></div></div>
              <div className="relative z-10 flex flex-col items-center justify-center flex-1 my-8 md:my-0 min-h-0">
                  <div className="relative w-40 h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 mb-6 group shrink-0"><div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl animate-pulse"></div><div className="relative w-full h-full rounded-full border-4 border-slate-800 bg-black overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-[spin_10s_linear_infinite]">{currentSongMetadata?.thumbnailUrl ? ( <img src={currentSongMetadata.thumbnailUrl} className="w-full h-full object-cover opacity-80" alt="Cover" /> ) : ( <div className="w-full h-full bg-gradient-to-tr from-slate-800 to-slate-900 flex items-center justify-center"><div className="w-1/3 h-1/3 bg-cyan-500 rounded-full blur-md"></div></div> )}<div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div></div><div className="absolute top-1/2 left-1/2 w-8 h-8 bg-slate-900 rounded-full transform -translate-x-1/2 -translate-y-1/2 border-2 border-slate-600 z-20"></div></div>

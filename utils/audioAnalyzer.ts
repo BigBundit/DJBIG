@@ -81,12 +81,12 @@ export const analyzeAudioAndGenerateNotes = async (
              else patternState.type = 'random';
           } else {
              // NORMAL/HARD/EXPERT PATTERNS
-             // Distribution: Stream 10%, Trill 10%, Jack 10%, Jump 35%, Chaos 35%
+             // Distribution: Stream 10%, Trill 10%, Jack 15% (Reduced), Jump 35% (Increased), Chaos 30% (Increased)
              if (level >= 8 && rand < 0.10) patternState.type = 'stream'; 
              else if (level >= 8 && rand < 0.20) patternState.type = 'trill'; 
-             else if (rand < 0.30) patternState.type = 'jack'; // Reduced significantly
-             else if (level >= 8 && rand < 0.65) patternState.type = 'jump'; // Increased
-             else patternState.type = 'chaos'; // Increased
+             else if (rand < 0.35) patternState.type = 'jack'; // 15% probability window
+             else if (level >= 8 && rand < 0.70) patternState.type = 'jump'; // 35% probability window
+             else patternState.type = 'chaos'; // Remaining ~30%
           }
           
           patternState.direction = Math.random() > 0.5 ? 1 : -1;

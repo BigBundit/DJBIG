@@ -118,29 +118,36 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
         });
     };
 
+    const handleOffsetChange = (value: number) => {
+        onAudioSettingsChange({
+            ...audioSettings,
+            audioOffset: value
+        });
+    }
+
     const activeConfig = getBaseConfig(activeMode);
     const currentBoundKeys = localMappings[activeMode];
 
     // Helper Component for Sci-Fi Sliders
-    const CyberSlider = ({ label, value, onChange }: { label: string, value: number, onChange: (v: number) => void }) => (
+    const CyberSlider = ({ label, value, min, max, step, onChange, displayValue }: { label: string, value: number, min: number, max: number, step: number, onChange: (v: number) => void, displayValue: string }) => (
         <div className="w-full">
             <div className="flex justify-between items-center mb-1">
                 <span className={`text-xs font-bold text-cyan-500 tracking-wider ${fontClass}`}>{label}</span>
                 <span className="text-cyan-400 font-mono text-xs bg-black/50 px-2 rounded border border-cyan-500/30">
-                    {Math.round(value * 100)}%
+                    {displayValue}
                 </span>
             </div>
             <div className="relative h-6 w-full flex items-center group">
                 {/* Track Background */}
                 <div className="absolute w-full h-2 bg-slate-800 border border-slate-600 skew-x-[-10deg]"></div>
-                {/* Filled Track */}
+                {/* Filled Track (Only for 0-1 sliders usually, but works here if we normalize) */}
                 <div 
                     className="absolute h-2 bg-cyan-500 shadow-[0_0_10px_cyan] skew-x-[-10deg] transition-all duration-75" 
-                    style={{ width: `${value * 100}%` }}
+                    style={{ width: `${((value - min) / (max - min)) * 100}%` }}
                 ></div>
                 {/* Input */}
                 <input 
-                    type="range" min="0" max="1" step="0.05" 
+                    type="range" min={min} max={max} step={step} 
                     value={value}
                     onChange={(e) => onChange(parseFloat(e.target.value))}
                     className="absolute w-full h-full opacity-0 cursor-pointer"
@@ -273,31 +280,32 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                              <div className="space-y-6">
                                 <CyberSlider 
                                     label={t.MASTER_VOL} 
+                                    min={0} max={1} step={0.05}
                                     value={audioSettings.masterVolume} 
                                     onChange={(v) => handleVolumeChange('master', v)} 
+                                    displayValue={`${Math.round(audioSettings.masterVolume * 100)}%`}
                                 />
                                 <CyberSlider 
                                     label={t.SFX_VOL} 
+                                    min={0} max={1} step={0.05}
                                     value={audioSettings.sfxVolume} 
                                     onChange={(v) => handleVolumeChange('sfx', v)} 
+                                    displayValue={`${Math.round(audioSettings.sfxVolume * 100)}%`}
                                 />
                                 <CyberSlider 
                                     label={t.MUSIC_VOL} 
-                                    value={audioSettings.musicVolume ?? 1.0} // Fallback for old saves
+                                    min={0} max={1} step={0.05}
+                                    value={audioSettings.musicVolume ?? 1.0} 
                                     onChange={(v) => handleVolumeChange('music', v)} 
+                                    displayValue={`${Math.round((audioSettings.musicVolume ?? 1.0) * 100)}%`}
                                 />
-                             </div>
-                        </div>
-
-                        {/* Resolution Setting - NEW */}
-                        <div className="space-y-4">
-                             <div className="flex items-center gap-2 border-b border-slate-700 pb-2 mb-4">
-                                <span className="text-purple-500 text-lg">■</span>
-                                <h3 className={`text-white font-bold tracking-wider ${fontClass}`}>RESOLUTION</h3>
-                             </div>
-                             {/* Since specific resolution props weren't passed in this snippet, adding a placeholder or assuming generic logic */}
-                             <div className="p-2 bg-slate-800/30 rounded border border-slate-700 text-center text-xs text-slate-500 font-mono">
-                                AUTO-DETECTED
+                                <CyberSlider 
+                                    label={t.AUDIO_OFFSET} 
+                                    min={-200} max={200} step={1}
+                                    value={audioSettings.audioOffset ?? 0} 
+                                    onChange={(v) => handleOffsetChange(v)} 
+                                    displayValue={`${audioSettings.audioOffset > 0 ? '+' : ''}${audioSettings.audioOffset}ms`}
+                                />
                              </div>
                         </div>
                     </div>
