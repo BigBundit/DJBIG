@@ -7,13 +7,17 @@ interface PauseMenuProps {
     onQuit: () => void;
     t: any;
     fontClass: string;
+    onTitleClick?: () => void;
 }
 
-export const PauseMenu: React.FC<PauseMenuProps> = ({ onResume, onSettings, onQuit, t, fontClass }) => {
+export const PauseMenu: React.FC<PauseMenuProps> = ({ onResume, onSettings, onQuit, t, fontClass, onTitleClick }) => {
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
             <div className="flex flex-col space-y-4 p-8 border border-cyan-500/50 bg-slate-900 rounded-lg text-center min-w-[320px] shadow-[0_0_50px_rgba(6,182,212,0.2)]">
-                <h2 className={`text-4xl font-black text-white mb-6 tracking-widest text-shadow-cyan italic ${fontClass}`}>
+                <h2 
+                    onClick={onTitleClick}
+                    className={`text-4xl font-black text-white mb-6 tracking-widest text-shadow-cyan italic ${fontClass} cursor-pointer active:scale-95 transition-transform select-none`}
+                >
                     {t.PAUSED}
                 </h2>
                 

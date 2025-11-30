@@ -180,7 +180,8 @@ const App: React.FC = () => {
   // Touch Input State
   const laneContainerRef = useRef<HTMLDivElement>(null);
   const touchedLanesRef = useRef<Set<number>>(new Set());
-  const touchComboRef = useRef<Set<string>>(new Set());
+  
+  const lastPauseTitleClickRef = useRef<number>(0);
 
   // Visual State for React Render
   const [renderNotes, setRenderNotes] = useState<NoteType[]>([]);
@@ -296,25 +297,24 @@ const App: React.FC = () => {
     setShowMobileStart(false);
   };
 
-  const handleDashboardTouch = (zone: string, active: boolean) => {
-      if (active) {
-          touchComboRef.current.add(zone);
-          if (touchComboRef.current.has('speed') && touchComboRef.current.has('score')) {
-              setIsAutoPlay(prev => {
-                  const newState = !prev;
-                  setFeedback({ 
-                      text: newState ? "AUTO PILOT ENGAGED" : "MANUAL CONTROL", 
-                      color: "text-fuchsia-400", 
-                      id: Date.now() 
-                  });
-                  return newState;
+  const handlePauseTitleClick = () => {
+      const now = Date.now();
+      if (now - lastPauseTitleClickRef.current < 500) {
+          // Double Tap Detected
+          setIsAutoPlay(prev => {
+              const newState = !prev;
+              setFeedback({ 
+                  text: newState ? "AUTO PILOT ENGAGED" : "MANUAL CONTROL", 
+                  color: "text-fuchsia-400", 
+                  id: Date.now() 
               });
-              playUiSound('select');
-              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([50, 50, 50]);
-              touchComboRef.current.clear();
-          }
+              return newState;
+          });
+          playUiSound('select');
+          if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([50, 50, 50]);
+          lastPauseTitleClickRef.current = 0; // Reset
       } else {
-          touchComboRef.current.delete(zone);
+          lastPauseTitleClickRef.current = now;
       }
   };
 
@@ -1293,20 +1293,10 @@ const App: React.FC = () => {
                     <div className="w-6 bg-slate-900/80 border-l border-slate-700 relative flex flex-col justify-end p-0.5"><div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`}>{t.GROOVE}</div><div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700"><div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div></div><div className={`mt-1 w-full h-1 ${health > 90 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`}></div></div>
                 </div>
                 <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner">
-                        <div 
-                            onTouchStart={(e) => { e.stopPropagation(); handleDashboardTouch('speed', true); }}
-                            onTouchEnd={(e) => { e.stopPropagation(); handleDashboardTouch('speed', false); }}
-                            onTouchCancel={(e) => { e.stopPropagation(); handleDashboardTouch('speed', false); }}
-                            className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left"
-                        >
+                        <div className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left">
                             <div className={`text-[8px] text-slate-400 font-bold ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="text-sm font-display text-white">{speedMod.toFixed(2)}</div>
                         </div>
-                        <div 
-                            onTouchStart={(e) => { e.stopPropagation(); handleDashboardTouch('score', true); }}
-                            onTouchEnd={(e) => { e.stopPropagation(); handleDashboardTouch('score', false); }}
-                            onTouchCancel={(e) => { e.stopPropagation(); handleDashboardTouch('score', false); }}
-                            className="flex flex-col items-center bg-black px-3 py-1 rounded border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)]"
-                        >
+                        <div className="flex flex-col items-center bg-black px-3 py-1 rounded border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)]">
                             <div className={`text-[8px] text-red-900 font-bold tracking-widest w-full text-center ${fontClass}`}>{t.SCORE}</div><div className="font-mono text-2xl text-red-600 font-bold tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">{score.toString().padStart(7, '0')}</div>
                         </div>
                         <div className="scale-90 origin-right"><button onClick={(e) => { e.stopPropagation(); togglePause(); playUiSound('select'); }} className="w-10 h-10 flex items-center justify-center bg-slate-300 border border-slate-400 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)] hover:bg-white active:scale-95 transition-all group"><div className="flex flex-col space-y-1"><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div></div></button></div>
@@ -1468,7 +1458,7 @@ const App: React.FC = () => {
       )}
 
       {(status === GameStatus.PLAYING || status === GameStatus.PAUSED) && ( <div className={`absolute inset-0 z-40 flex items-center ${getPositionClass()}`}>{renderGameFrame()}</div> )}
-      {status === GameStatus.PAUSED && ( <PauseMenu onResume={togglePause} onSettings={() => setShowKeyConfig(true)} onQuit={quitGame} t={t} fontClass={fontClass} /> )}
+      {status === GameStatus.PAUSED && ( <PauseMenu onResume={togglePause} onSettings={() => setShowKeyConfig(true)} onQuit={quitGame} t={t} fontClass={fontClass} onTitleClick={handlePauseTitleClick} /> )}
       {status === GameStatus.FINISHED && ( <EndScreen stats={{ perfect: perfectCount, good: goodCount, miss: missCount, maxCombo: maxCombo, score: score }} fileName={currentSongMetadata?.name || "UNKNOWN"} onRestart={startCountdownSequence} onMenu={quitGame} t={t} fontClass={fontClass} onPlaySound={playUiSound} /> )}
     </div>
   );
