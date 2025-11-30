@@ -9,9 +9,10 @@ interface EndScreenProps {
     onMenu: () => void;
     t: any;
     fontClass: string;
+    onPlaySound?: (type: 'hover' | 'select' | 'back' | 'scratch') => void;
 }
 
-export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart, onMenu, t, fontClass }) => {
+export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart, onMenu, t, fontClass, onPlaySound }) => {
     const [highScoreData, setHighScoreData] = useState<HighScore | null>(null);
     const [isNewRecord, setIsNewRecord] = useState(false);
     const [playerName, setPlayerName] = useState("");
@@ -89,6 +90,7 @@ export const EndScreen: React.FC<EndScreenProps> = ({ stats, fileName, onRestart
                 requestAnimationFrame(animateScore);
             } else {
                 setShowRank(true); // Show rank after score finishes
+                if (onPlaySound) onPlaySound('scratch'); // Trigger sound effect on completion
             }
         };
 

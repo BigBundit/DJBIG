@@ -180,6 +180,7 @@ const App: React.FC = () => {
   // Touch Input State
   const laneContainerRef = useRef<HTMLDivElement>(null);
   const touchedLanesRef = useRef<Set<number>>(new Set());
+  const touchComboRef = useRef<Set<string>>(new Set());
 
   // Visual State for React Render
   const [renderNotes, setRenderNotes] = useState<NoteType[]>([]);
@@ -293,6 +294,28 @@ const App: React.FC = () => {
 
     // 4. Hide Overlay
     setShowMobileStart(false);
+  };
+
+  const handleDashboardTouch = (zone: string, active: boolean) => {
+      if (active) {
+          touchComboRef.current.add(zone);
+          if (touchComboRef.current.has('speed') && touchComboRef.current.has('score')) {
+              setIsAutoPlay(prev => {
+                  const newState = !prev;
+                  setFeedback({ 
+                      text: newState ? "AUTO PILOT ENGAGED" : "MANUAL CONTROL", 
+                      color: "text-fuchsia-400", 
+                      id: Date.now() 
+                  });
+                  return newState;
+              });
+              playUiSound('select');
+              if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([50, 50, 50]);
+              touchComboRef.current.clear();
+          }
+      } else {
+          touchComboRef.current.delete(zone);
+      }
   };
 
   // Update ref and media volume when state changes
@@ -502,7 +525,7 @@ const App: React.FC = () => {
       return baseVol * audioSettingsRef.current.masterVolume * audioSettingsRef.current.sfxVolume;
   };
 
-  const playUiSound = (type: 'hover' | 'select') => {
+  const playUiSound = (type: 'hover' | 'select' | 'back' | 'scratch') => {
       if (!audioCtxRef.current) return;
       const ctx = audioCtxRef.current;
       const t = ctx.currentTime;
@@ -519,7 +542,26 @@ const App: React.FC = () => {
           gain.connect(ctx.destination);
           osc.start(t);
           osc.stop(t + 0.1);
+      } else if (type === 'scratch') {
+          // HEAVY IMPACT / SCRATCH - BOOSTED VOLUME
+          const noise = ctx.createBufferSource();
+          noise.buffer = getNoiseBuffer(ctx);
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(1000, t);
+          filter.frequency.exponentialRampToValueAtTime(100, t + 0.5);
+          
+          // Boosted gain from 0.8 to 1.5 to ensure audibility
+          gain.gain.setValueAtTime(getVol(1.5), t);
+          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+          
+          noise.connect(filter);
+          filter.connect(gain);
+          gain.connect(ctx.destination);
+          noise.start(t);
+          noise.stop(t + 0.5);
       } else {
+          // SELECT
           const noise = ctx.createBufferSource();
           noise.buffer = getNoiseBuffer(ctx);
           noise.loop = true;
@@ -735,138 +777,118 @@ const App: React.FC = () => {
     const ctx = audioCtxRef.current;
     const t = ctx.currentTime;
     
-    // 1. UI SOUNDS (UNCHANGED)
+    // 1. UI SOUNDS
     if (laneIndex === 'hover') {
-          const gain = ctx.createGain();
-          const osc = ctx.createOscillator();
-          osc.frequency.setValueAtTime(400, t);
-          osc.frequency.exponentialRampToValueAtTime(200, t + 0.05);
-          gain.gain.setValueAtTime(getVol(0.05), t);
-          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
-          osc.type = 'sine';
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(t);
-          osc.stop(t + 0.1);
-          return;
+          playUiSound('hover'); return;
     } 
-    
     if (laneIndex === 'select') {
-          const gain = ctx.createGain();
-          const noise = ctx.createBufferSource();
-          noise.buffer = getNoiseBuffer(ctx);
-          noise.loop = true;
-          const filter = ctx.createBiquadFilter();
-          filter.type = 'bandpass';
-          filter.Q.value = 2.0;
-          filter.frequency.setValueAtTime(400, t);
-          filter.frequency.linearRampToValueAtTime(1500, t + 0.05);
-          filter.frequency.linearRampToValueAtTime(100, t + 0.15);
-          gain.gain.setValueAtTime(0, t);
-          gain.gain.linearRampToValueAtTime(getVol(0.6), t + 0.02);
-          gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
-          noise.connect(filter);
-          filter.connect(gain);
-          gain.connect(ctx.destination);
-          noise.start(t);
-          noise.stop(t + 0.2);
-          return;
+          playUiSound('select'); return;
     }
 
-    // 2. GAMEPLAY SOUNDS: INTELLIGENT SONG SLICING
-    if (typeof laneIndex === 'number' && audioBufferRef.current && statusRef.current === GameStatus.PLAYING) {
-        
-        // A. Determine Instrument Type based on Lane and KeyMode
-        // Mapping: 
-        // 7K: S(Hat), D(Snare), F(Perc), Space(Kick), J(Perc), K(Snare), L(Hat)
-        // 5K: D(Snare), F(Perc), Space(Kick), J(Perc), K(Snare)
-        // 4K: D(Snare), F(Kick), J(Kick), K(Snare)
-        
-        let drumType: 'kick' | 'snare' | 'hat' = 'hat';
-        
+    // 2. GAMEPLAY SOUNDS: SOFT DRUM KIT (Kick, Tom, Hat) - VOLUME REDUCED 70%
+    if (typeof laneIndex === 'number') {
+        // Determine Instrument based on lane
+        let type = 'tom';
         if (keyMode === 7) {
-            if (laneIndex === 3) drumType = 'kick'; // Space
-            else if (laneIndex === 1 || laneIndex === 5) drumType = 'snare';
-            else drumType = 'hat';
+            if (laneIndex === 3) type = 'kick';
+            else if (laneIndex === 0 || laneIndex === 6) type = 'hat';
+            else type = 'tom';
         } else if (keyMode === 5) {
-            if (laneIndex === 2) drumType = 'kick'; // Space
-            else if (laneIndex === 0 || laneIndex === 4) drumType = 'snare';
-            else drumType = 'hat';
-        } else { // 4K
-            if (laneIndex === 1 || laneIndex === 2) drumType = 'kick';
-            else drumType = 'snare';
-        }
-
-        const source = ctx.createBufferSource();
-        source.buffer = audioBufferRef.current;
-        
-        // Calculate song position
-        let elapsed = 0;
-        if (mediaRef.current && !mediaRef.current.paused) {
-            elapsed = mediaRef.current.currentTime * 1000 + START_OFFSET_MS;
+            if (laneIndex === 2) type = 'kick';
+            else if (laneIndex === 0 || laneIndex === 4) type = 'hat';
+            else type = 'tom';
         } else {
-            const now = performance.now();
-            elapsed = now - startTimeRef.current - totalPauseDurationRef.current;
+            if (laneIndex === 1 || laneIndex === 2) type = 'kick';
+            else type = 'hat';
         }
 
-        // Sampling Logic
-        // We take the current song time, but we FILTER it to make it sound like a drum
-        const songTime = Math.max(0, (elapsed - START_OFFSET_MS) / 1000); 
-        const sampleDuration = 0.12; // Short sample for percussive feel
-
-        // Filter Chain
-        const filter = ctx.createBiquadFilter();
         const gain = ctx.createGain();
-
-        if (drumType === 'kick') {
-            // Low Pass: Isolate Bass/Kick from song
-            filter.type = 'lowpass';
-            filter.frequency.setValueAtTime(150, t); 
-            filter.Q.value = 1.0;
-            // Boost volume for kick punch
-            gain.gain.setValueAtTime(getVol(3.0), t); 
-        } else if (drumType === 'snare') {
-            // Band Pass: Isolate mid-range snap
-            filter.type = 'bandpass';
-            filter.frequency.setValueAtTime(2000, t);
-            filter.Q.value = 0.8;
-            gain.gain.setValueAtTime(getVol(2.0), t);
-        } else {
-            // High Pass: Isolate shakers/cymbals
-            filter.type = 'highpass';
-            filter.frequency.setValueAtTime(5000, t);
-            filter.Q.value = 1.0;
-            gain.gain.setValueAtTime(getVol(1.5), t);
-        }
-
-        // Envelope: Fast decay to simulate drum hit tightness
-        gain.gain.exponentialRampToValueAtTime(0.01, t + sampleDuration);
-
-        source.connect(filter);
-        filter.connect(gain);
         gain.connect(ctx.destination);
-        source.start(t, songTime, sampleDuration);
-        
-        return;
+
+        if (type === 'kick') {
+            // SOFT KICK / LOW TOM
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(80, t);
+            osc.frequency.exponentialRampToValueAtTime(30, t + 0.15);
+            
+            // Soft Attack/Decay - VOLUME 0.12 (30% of 0.4)
+            gain.gain.setValueAtTime(getVol(0.12), t); 
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+            
+            osc.connect(gain);
+            osc.start(t);
+            osc.stop(t + 0.15);
+        } else if (type === 'hat') {
+            // SOFT HAT (Closed Tsk)
+            const noise = ctx.createBufferSource();
+            noise.buffer = getNoiseBuffer(ctx);
+            
+            const filter = ctx.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.setValueAtTime(6000, t); 
+            
+            // Very soft - VOLUME 0.045 (30% of 0.15)
+            gain.gain.setValueAtTime(getVol(0.045), t); 
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+            
+            noise.connect(filter);
+            filter.connect(gain);
+            noise.start(t);
+            noise.stop(t + 0.05);
+        } else {
+            // SOFT TOM / MUFFLED SNARE
+            const osc = ctx.createOscillator();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(120, t);
+            osc.frequency.linearRampToValueAtTime(60, t + 0.1);
+            
+            const noise = ctx.createBufferSource();
+            noise.buffer = getNoiseBuffer(ctx);
+            const noiseFilter = ctx.createBiquadFilter();
+            noiseFilter.type = 'lowpass';
+            noiseFilter.frequency.value = 800;
+            
+            const noiseGain = ctx.createGain();
+            noiseGain.gain.setValueAtTime(0.1, t);
+            noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+            
+            // Overall Volume - VOLUME 0.075 (30% of 0.25)
+            gain.gain.setValueAtTime(getVol(0.075), t); 
+            gain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+            
+            osc.connect(gain);
+            noise.connect(noiseFilter);
+            noiseFilter.connect(noiseGain);
+            noiseGain.connect(gain);
+            
+            osc.start(t);
+            osc.stop(t + 0.15);
+            noise.start(t);
+            noise.stop(t + 0.15);
+        }
     }
   };
 
   const playOutroSound = () => {
-    // ... (Existing Outro logic) ...
     if (!audioCtxRef.current) return;
     const ctx = audioCtxRef.current;
     const t = ctx.currentTime;
-    // Just a quick simple version for the update block
+    
+    // Impact Sound
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.frequency.setValueAtTime(100, t);
-    osc.frequency.exponentialRampToValueAtTime(0.01, t + 1.0);
+    
+    osc.frequency.setValueAtTime(50, t);
+    osc.frequency.exponentialRampToValueAtTime(10, t + 2.0);
+    
     gain.gain.setValueAtTime(getVol(1.0), t);
-    gain.gain.exponentialRampToValueAtTime(0.01, t + 1.0);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + 2.0);
+    
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(t);
-    osc.stop(t + 1);
+    osc.stop(t + 2);
   };
 
   const triggerOutro = useCallback(() => {
@@ -1271,8 +1293,22 @@ const App: React.FC = () => {
                     <div className="w-6 bg-slate-900/80 border-l border-slate-700 relative flex flex-col justify-end p-0.5"><div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`}>{t.GROOVE}</div><div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700"><div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div></div><div className={`mt-1 w-full h-1 ${health > 90 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`}></div></div>
                 </div>
                 <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner">
-                        <div className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left"><div className={`text-[8px] text-slate-400 font-bold ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="text-sm font-display text-white">{speedMod.toFixed(2)}</div></div>
-                        <div className="flex flex-col items-center bg-black px-3 py-1 rounded border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)]"><div className={`text-[8px] text-red-900 font-bold tracking-widest w-full text-center ${fontClass}`}>{t.SCORE}</div><div className="font-mono text-2xl text-red-600 font-bold tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">{score.toString().padStart(7, '0')}</div></div>
+                        <div 
+                            onTouchStart={(e) => { e.stopPropagation(); handleDashboardTouch('speed', true); }}
+                            onTouchEnd={(e) => { e.stopPropagation(); handleDashboardTouch('speed', false); }}
+                            onTouchCancel={(e) => { e.stopPropagation(); handleDashboardTouch('speed', false); }}
+                            className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left"
+                        >
+                            <div className={`text-[8px] text-slate-400 font-bold ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="text-sm font-display text-white">{speedMod.toFixed(2)}</div>
+                        </div>
+                        <div 
+                            onTouchStart={(e) => { e.stopPropagation(); handleDashboardTouch('score', true); }}
+                            onTouchEnd={(e) => { e.stopPropagation(); handleDashboardTouch('score', false); }}
+                            onTouchCancel={(e) => { e.stopPropagation(); handleDashboardTouch('score', false); }}
+                            className="flex flex-col items-center bg-black px-3 py-1 rounded border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)]"
+                        >
+                            <div className={`text-[8px] text-red-900 font-bold tracking-widest w-full text-center ${fontClass}`}>{t.SCORE}</div><div className="font-mono text-2xl text-red-600 font-bold tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">{score.toString().padStart(7, '0')}</div>
+                        </div>
                         <div className="scale-90 origin-right"><button onClick={(e) => { e.stopPropagation(); togglePause(); playUiSound('select'); }} className="w-10 h-10 flex items-center justify-center bg-slate-300 border border-slate-400 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)] hover:bg-white active:scale-95 transition-all group"><div className="flex flex-col space-y-1"><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div></div></button></div>
                 </div>
             </div>
@@ -1433,7 +1469,7 @@ const App: React.FC = () => {
 
       {(status === GameStatus.PLAYING || status === GameStatus.PAUSED) && ( <div className={`absolute inset-0 z-40 flex items-center ${getPositionClass()}`}>{renderGameFrame()}</div> )}
       {status === GameStatus.PAUSED && ( <PauseMenu onResume={togglePause} onSettings={() => setShowKeyConfig(true)} onQuit={quitGame} t={t} fontClass={fontClass} /> )}
-      {status === GameStatus.FINISHED && ( <EndScreen stats={{ perfect: perfectCount, good: goodCount, miss: missCount, maxCombo: maxCombo, score: score }} fileName={currentSongMetadata?.name || "UNKNOWN"} onRestart={startCountdownSequence} onMenu={quitGame} t={t} fontClass={fontClass} /> )}
+      {status === GameStatus.FINISHED && ( <EndScreen stats={{ perfect: perfectCount, good: goodCount, miss: missCount, maxCombo: maxCombo, score: score }} fileName={currentSongMetadata?.name || "UNKNOWN"} onRestart={startCountdownSequence} onMenu={quitGame} t={t} fontClass={fontClass} onPlaySound={playUiSound} /> )}
     </div>
   );
 };
