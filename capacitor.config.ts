@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.djbig.djbig',
+  appId: 'com.djbiggame.djbig',
   appName: 'DJBIG',
   webDir: 'dist'
 };
