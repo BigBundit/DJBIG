@@ -1418,16 +1418,57 @@ const App: React.FC = () => {
              <div className="hidden md:flex h-24 items-end pb-4 px-8 border-b border-cyan-500/30 bg-gradient-to-b from-slate-900 to-transparent shrink-0"><h2 className={`text-4xl font-black italic text-white tracking-tighter ${fontClass} drop-shadow-md`}>SELECT <span className="text-cyan-400">MUSIC</span></h2></div>
              <div className="w-full md:flex-1 md:overflow-y-auto custom-scrollbar p-0 space-y-1">
                  {/* Demo Tracks */}
-                 <div onClick={() => loadDemoTrack('/demoplay.mp4', 'DEMO_TRACK_01')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_01" ? 'bg-gradient-to-r from-green-900/80 to-transparent border-green-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-green-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}><div className={`font-black text-2xl mr-4 ${localFileName === "DEMO_TRACK_01" ? 'text-green-400' : 'text-slate-700 group-hover:text-green-800'}`}>01</div><div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_01} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_01" ? 'text-white' : 'text-slate-400 group-hover:text-green-200'}`} /><div className="text-xs font-mono text-green-600/70">HIGH SPEED ROCK // 175 BPM</div></div>{localFileName === "DEMO_TRACK_01" && <div className="text-green-400 text-xl animate-pulse">◀</div>}</div>
-                 <div onClick={() => loadDemoTrack('/demoplay02.mp4', 'DEMO_TRACK_02')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_02" ? 'bg-gradient-to-r from-amber-900/80 to-transparent border-amber-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-amber-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}><div className={`font-black text-2xl mr-4 ${localFileName === "DEMO_TRACK_02" ? 'text-amber-400' : 'text-slate-700 group-hover:text-amber-800'}`}>02</div><div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_02} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_02" ? 'text-white' : 'text-slate-400 group-hover:text-amber-200'}`} /><div className="text-xs font-mono text-amber-600/70">ALTERNATIVE MIX // 140 BPM</div></div>{localFileName === "DEMO_TRACK_02" && <div className="text-amber-400 text-xl animate-pulse">◀</div>}</div>
-                 <div onClick={() => loadDemoTrack('/demoplay03.mp4', 'DEMO_TRACK_03')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_03" ? 'bg-gradient-to-r from-purple-900/80 to-transparent border-purple-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-purple-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}><div className={`font-black text-2xl mr-4 ${localFileName === "DEMO_TRACK_03" ? 'text-purple-400' : 'text-slate-700 group-hover:text-purple-800'}`}>03</div><div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_03} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_03" ? 'text-white' : 'text-slate-400 group-hover:text-purple-200'}`} /><div className="text-xs font-mono text-purple-600/70">ELECTRONIC CORE // 150 BPM</div></div>{localFileName === "DEMO_TRACK_03" && <div className="text-purple-400 text-xl animate-pulse">◀</div>}</div>
-                 <div onClick={() => loadDemoTrack('/demoplay04.mp4', 'DEMO_TRACK_04')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_04" ? 'bg-gradient-to-r from-rose-900/80 to-transparent border-rose-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-rose-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}><div className={`font-black text-2xl mr-4 ${localFileName === "DEMO_TRACK_04" ? 'text-rose-400' : 'text-slate-700 group-hover:text-rose-800'}`}>04</div><div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_04} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_04" ? 'text-white' : 'text-slate-400 group-hover:text-rose-200'}`} /><div className="text-xs font-mono text-rose-600/70">CYBER PUNK ROCK // 160 BPM</div></div>{localFileName === "DEMO_TRACK_04" && <div className="text-rose-400 text-xl animate-pulse">◀</div>}</div>
+                 <div onClick={() => loadDemoTrack('/demoplay.mp4', 'DEMO_TRACK_01')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_01" ? 'bg-gradient-to-r from-green-900/80 to-transparent border-green-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-green-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                    <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_01" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
+                        <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
+                        <div className={`w-full h-full bg-gradient-to-tr from-green-500 to-emerald-700 opacity-80`}></div>
+                        <span className="absolute text-[8px] font-black text-black/50 z-0 rotate-45">DJBIG</span>
+                    </div>
+                    <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_01} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_01" ? 'text-white' : 'text-slate-400 group-hover:text-green-200'}`} /><div className="text-xs font-mono text-green-600/70">HIGH SPEED ROCK // 175 BPM</div></div>{localFileName === "DEMO_TRACK_01" && <div className="text-green-400 text-xl animate-pulse">◀</div>}
+                 </div>
+                 
+                 <div onClick={() => loadDemoTrack('/demoplay02.mp4', 'DEMO_TRACK_02')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_02" ? 'bg-gradient-to-r from-amber-900/80 to-transparent border-amber-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-amber-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                    <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_02" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
+                        <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
+                        <div className={`w-full h-full bg-gradient-to-tr from-amber-500 to-orange-700 opacity-80`}></div>
+                        <span className="absolute text-[8px] font-black text-black/50 z-0 rotate-45">DJBIG</span>
+                    </div>
+                    <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_02} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_02" ? 'text-white' : 'text-slate-400 group-hover:text-amber-200'}`} /><div className="text-xs font-mono text-amber-600/70">ALTERNATIVE MIX // 140 BPM</div></div>{localFileName === "DEMO_TRACK_02" && <div className="text-amber-400 text-xl animate-pulse">◀</div>}
+                 </div>
+
+                 <div onClick={() => loadDemoTrack('/demoplay03.mp4', 'DEMO_TRACK_03')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_03" ? 'bg-gradient-to-r from-purple-900/80 to-transparent border-purple-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-purple-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                    <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_03" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
+                        <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
+                        <div className={`w-full h-full bg-gradient-to-tr from-purple-500 to-fuchsia-700 opacity-80`}></div>
+                        <span className="absolute text-[8px] font-black text-black/50 z-0 rotate-45">DJBIG</span>
+                    </div>
+                    <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_03} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_03" ? 'text-white' : 'text-slate-400 group-hover:text-purple-200'}`} /><div className="text-xs font-mono text-purple-600/70">ELECTRONIC CORE // 150 BPM</div></div>{localFileName === "DEMO_TRACK_03" && <div className="text-purple-400 text-xl animate-pulse">◀</div>}
+                 </div>
+
+                 <div onClick={() => loadDemoTrack('/demoplay04.mp4', 'DEMO_TRACK_04')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_04" ? 'bg-gradient-to-r from-rose-900/80 to-transparent border-rose-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-rose-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                    <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_04" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
+                        <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
+                        <div className={`w-full h-full bg-gradient-to-tr from-rose-500 to-pink-700 opacity-80`}></div>
+                        <span className="absolute text-[8px] font-black text-black/50 z-0 rotate-45">DJBIG</span>
+                    </div>
+                    <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_04} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_04" ? 'text-white' : 'text-slate-400 group-hover:text-rose-200'}`} /><div className="text-xs font-mono text-rose-600/70">CYBER PUNK ROCK // 160 BPM</div></div>{localFileName === "DEMO_TRACK_04" && <div className="text-rose-400 text-xl animate-pulse">◀</div>}
+                 </div>
                  
                  {songList.map((song, idx) => {
                      const isActive = localFileName === song.name;
                      return (
                         <div key={song.id} onClick={() => { handleFileSelect(song.file, song); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${isActive ? 'bg-gradient-to-r from-cyan-900/80 to-transparent border-cyan-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-cyan-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
-                            <div className={`font-black text-2xl mr-4 ${isActive ? 'text-cyan-400' : 'text-slate-700 group-hover:text-cyan-800'}`}>{(idx + 5).toString().padStart(2, '0')}</div>
+                            <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${isActive ? 'border-white animate-spin-slow' : 'border-slate-700'} bg-black/50 overflow-hidden shrink-0 shadow-lg`}>
+                                {song.thumbnailUrl ? (
+                                    <img src={song.thumbnailUrl} className="w-full h-full object-cover" alt="Cover" />
+                                ) : (
+                                    <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
+                                        <div className="text-[8px] font-bold text-slate-400 text-center leading-none rotate-45">DJ<br/>BIG</div>
+                                    </div>
+                                )}
+                                {/* Center hole for vinyl look */}
+                                <div className="absolute w-3 h-3 bg-slate-900 rounded-full border border-slate-600 z-10"></div>
+                            </div>
                             <div className="flex-1 min-w-0 overflow-hidden"><MarqueeText text={song.name} className={`text-lg font-bold ${fontClass} ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-cyan-200'}`} /><div className="text-xs font-mono text-slate-600 group-hover:text-cyan-600/70 uppercase">{song.type.toUpperCase()} FILE</div></div>
                         </div>
                      );
@@ -1457,7 +1498,34 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {(status === GameStatus.PLAYING || status === GameStatus.PAUSED) && ( <div className={`absolute inset-0 z-40 flex items-center ${getPositionClass()}`}>{renderGameFrame()}</div> )}
+      {(status === GameStatus.PLAYING || status === GameStatus.PAUSED) && ( 
+          <>
+            {/* Song Info & Deco Layer */}
+            <div className={`absolute bottom-8 z-30 hidden md:flex flex-col pointer-events-none transition-all duration-500 ${layoutSettings.lanePosition === 'right' ? 'left-8 items-start' : 'right-8 items-end'}`}>
+                <div className="text-[5rem] font-black font-display italic tracking-tighter leading-none select-none mb-[-1rem] transform -skew-x-12 opacity-80"
+                     style={{
+                         backgroundImage: 'linear-gradient(to bottom, #22d3ee 0%, #3b82f6 50%, #9333ea 100%)',
+                         WebkitBackgroundClip: 'text',
+                         WebkitTextFillColor: 'transparent',
+                         filter: 'drop-shadow(0 4px 0px rgba(0,0,0,0.5))'
+                     }}>
+                    IGNORE <span className="text-white" style={{ WebkitTextFillColor: 'white' }}>PROTOCOL</span>
+                </div>
+                <div className={`flex flex-col relative w-64 ${layoutSettings.lanePosition === 'right' ? 'items-start' : 'items-end'}`}>
+                    <MarqueeText 
+                        text={currentSongMetadata?.name?.replace(/\.[^/.]+$/, "") || "UNKNOWN TRACK"} 
+                        className={`text-3xl font-black italic text-white tracking-tighter drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)] uppercase ${fontClass}`}
+                    />
+                    <div className="flex gap-2 mt-1">
+                        <span className="px-2 py-0.5 bg-black/60 border border-white/20 text-[10px] font-mono text-cyan-400 rounded">LV.{level}</span>
+                        <span className="px-2 py-0.5 bg-black/60 border border-white/20 text-[10px] font-mono text-fuchsia-400 rounded">{keyMode}K</span>
+                    </div>
+                </div>
+            </div>
+
+            <div className={`absolute inset-0 z-40 flex items-center ${getPositionClass()}`}>{renderGameFrame()}</div>
+          </> 
+      )}
       {status === GameStatus.PAUSED && ( <PauseMenu onResume={togglePause} onSettings={() => setShowKeyConfig(true)} onQuit={quitGame} t={t} fontClass={fontClass} onTitleClick={handlePauseTitleClick} /> )}
       {status === GameStatus.FINISHED && ( <EndScreen stats={{ perfect: perfectCount, good: goodCount, miss: missCount, maxCombo: maxCombo, score: score }} fileName={currentSongMetadata?.name || "UNKNOWN"} onRestart={startCountdownSequence} onMenu={quitGame} t={t} fontClass={fontClass} onPlaySound={playUiSound} /> )}
     </div>
