@@ -333,8 +333,8 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                             `}
                                         >
                                             <span className="skew-x-[10deg] inline-block">
-                                                <span className="md:hidden">{mode}K</span>
-                                                <span className="hidden md:inline">{mode}K MODE</span>
+                                                <span className="md:hidden">{mode}Key</span>
+                                                <span className="hidden md:inline">{mode}Key MODE</span>
                                             </span>
                                         </button>
                                     ))}

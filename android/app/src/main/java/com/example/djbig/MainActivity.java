@@ -1,4 +1,4 @@
-package com.example.djbig;
+package com.djbiggame.djbig;
 
 import com.getcapacitor.BridgeActivity;
 

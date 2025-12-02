@@ -1,8 +1,10 @@
 
+
 import React from 'react';
 
 interface PauseMenuProps {
     onResume: () => void;
+    onRestart: () => void;
     onSettings: () => void;
     onQuit: () => void;
     t: any;
@@ -10,7 +12,7 @@ interface PauseMenuProps {
     onTitleClick?: () => void;
 }
 
-export const PauseMenu: React.FC<PauseMenuProps> = ({ onResume, onSettings, onQuit, t, fontClass, onTitleClick }) => {
+export const PauseMenu: React.FC<PauseMenuProps> = ({ onResume, onRestart, onSettings, onQuit, t, fontClass, onTitleClick }) => {
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
             <div className="flex flex-col space-y-4 p-8 border border-cyan-500/50 bg-slate-900 rounded-lg text-center min-w-[320px] shadow-[0_0_50px_rgba(6,182,212,0.2)]">
@@ -27,6 +29,13 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({ onResume, onSettings, onQu
                 >
                     <span className="relative z-10">{t.RESUME}</span>
                     <div className="absolute inset-0 bg-cyan-400/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-300"></div>
+                </button>
+                
+                <button 
+                    onClick={onRestart} 
+                    className={`group relative py-3 px-6 bg-slate-800 hover:bg-green-600/50 border border-slate-600 hover:border-green-400 text-slate-300 hover:text-white font-bold uppercase tracking-wider transition-all duration-200 rounded ${fontClass}`}
+                >
+                    <span className="relative z-10">{t.RESTART}</span>
                 </button>
                 
                 <button 

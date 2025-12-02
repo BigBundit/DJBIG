@@ -19,7 +19,5 @@
       "type": "image/png"
     }
   ],
-  "requestFramePermissions": [
-    "vibration"
-  ]
+  "requestFramePermissions": []
 }

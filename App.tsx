@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   Note as NoteType, 
@@ -31,6 +32,7 @@ import { KeyConfigMenu } from './components/KeyConfigMenu';
 import { analyzeAudioAndGenerateNotes } from './utils/audioAnalyzer';
 import { generateVideoThumbnail, bufferToWave } from './utils/mediaUtils';
 import { generateRockDemo } from './utils/demoAudio';
+import { saveSongToDB, getAllSongsFromDB, clearAllSongsFromDB } from './utils/songStorage';
 import { TRANSLATIONS } from './translations';
 
 const audioCtxRef = { current: null as AudioContext | null };
@@ -141,8 +143,13 @@ const App: React.FC = () => {
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
-  // Mobile Fullscreen State
+  // Mobile States
   const [showMobileStart, setShowMobileStart] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [showMobileSetup, setShowMobileSetup] = useState<boolean>(false);
+  
+  // Refs for scrolling
+  const mobileSetupStartBtnRef = useRef<HTMLButtonElement>(null);
 
   // Translations Helper
   const t = TRANSLATIONS[layoutSettings.language];
@@ -189,10 +196,35 @@ const App: React.FC = () => {
   // Detect Mobile on Mount
   useEffect(() => {
     const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    setIsMobile(checkMobile);
     if (checkMobile) {
         setShowMobileStart(true);
     }
   }, []);
+
+  // LOAD PERSISTED SONGS ON START
+  useEffect(() => {
+      const loadSongs = async () => {
+          try {
+              const songs = await getAllSongsFromDB();
+              if (songs.length > 0) {
+                  setSongList(songs);
+              }
+          } catch (e) {
+              console.error("Failed to load songs from DB", e);
+          }
+      };
+      loadSongs();
+  }, []);
+
+  // Scroll to Game Start button on mobile setup open
+  useEffect(() => {
+    if (showMobileSetup && mobileSetupStartBtnRef.current) {
+        setTimeout(() => {
+            mobileSetupStartBtnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }, 100);
+    }
+  }, [showMobileSetup]);
 
   // Stop Preview Helper (Defined early for usage in effect)
   const stopPreview = useCallback(() => {
@@ -272,16 +304,42 @@ const App: React.FC = () => {
       };
   }, [isPlayingPreview, togglePause, stopPreview, showMobileStart]);
 
-  const handleMobileEnter = () => {
+  const handleMobileEnter = async () => {
     // 1. Trigger Full Screen
     const docEl = document.documentElement;
-    if (docEl.requestFullscreen) {
-        // @ts-ignore
-        docEl.requestFullscreen({ navigationUI: "hide" }).catch((err) => console.log("Fullscreen request denied", err));
-    } else if ((docEl as any).webkitRequestFullscreen) {
-        (docEl as any).webkitRequestFullscreen();
-    } else if ((docEl as any).webkitEnterFullscreen) {
-         (docEl as any).webkitEnterFullscreen();
+
+    // Attempt to lock orientation to portrait (if supported)
+    // @ts-ignore
+    if (screen.orientation && screen.orientation.lock) {
+        try {
+            // @ts-ignore
+            await screen.orientation.lock('portrait');
+        } catch (e) {
+            console.log("Orientation lock not supported or denied");
+        }
+    }
+
+    try {
+        if (docEl.requestFullscreen) {
+            // @ts-ignore
+            await docEl.requestFullscreen({ navigationUI: "hide" });
+        } else if ((docEl as any).webkitRequestFullscreen) {
+            await (docEl as any).webkitRequestFullscreen();
+        } else if ((docEl as any).webkitEnterFullscreen) {
+             await (docEl as any).webkitEnterFullscreen();
+        }
+    } catch (err) {
+        console.log("Fullscreen request denied", err);
+    }
+    
+    // 1.5 REQUEST WAKE LOCK (Prevent screen dimming)
+    if ('wakeLock' in navigator) {
+        try {
+            // @ts-ignore
+            const wakeLock = await navigator.wakeLock.request('screen');
+        } catch (err) {
+             console.log("Wake Lock failed", err);
+        }
     }
 
     // 2. Init Audio immediately on user interaction
@@ -290,7 +348,9 @@ const App: React.FC = () => {
     // 3. Play UI Sound AND PRIME VIBRATION
     playUiSound('select');
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        navigator.vibrate([100, 50, 100]); 
+        try {
+            navigator.vibrate(200); // 200ms vibration to unlock Android permission
+        } catch (e) { console.log("Vibrate failed", e); }
     }
 
     // 4. Hide Overlay
@@ -582,17 +642,21 @@ const App: React.FC = () => {
       }
   };
 
+  // ASYNC ANALYSIS WRAPPER TO PREVENT STUTTER
   const performAnalysis = async (buffer: AudioBuffer) => {
       setIsAnalyzing(true);
-      try {
-        // Pass START_OFFSET_MS to analysis
-        const notes = await analyzeAudioAndGenerateNotes(buffer, level, keyMode, START_OFFSET_MS);
-        setAnalyzedNotes(notes);
-      } catch (error) {
-        console.error("Analysis failed");
-      } finally {
-        setIsAnalyzing(false);
-      }
+      // Use setTimeout to yield to main thread so UI updates to "Analyzing" first
+      setTimeout(async () => {
+          try {
+            // Pass START_OFFSET_MS to analysis
+            const notes = await analyzeAudioAndGenerateNotes(buffer, level, keyMode, START_OFFSET_MS);
+            setAnalyzedNotes(notes);
+          } catch (error) {
+            console.error("Analysis failed");
+          } finally {
+            setIsAnalyzing(false);
+          }
+      }, 50);
   };
 
   const loadDemoTrack = async (filename: string, id: string) => {
@@ -607,14 +671,6 @@ const App: React.FC = () => {
     if (id === 'DEMO_TRACK_03') demoTitle = t.PLAY_DEMO_03;
     if (id === 'DEMO_TRACK_04') demoTitle = t.PLAY_DEMO_04;
 
-    setCurrentSongMetadata({
-        id: id,
-        file: new File([], id),
-        name: demoTitle,
-        thumbnailUrl: null,
-        type: 'video'
-    });
-
     const absolutePath = filename.startsWith('/') ? filename : `/${filename}`;
     
     try {
@@ -623,6 +679,24 @@ const App: React.FC = () => {
         
         const videoBlob = await response.blob();
         const videoUrl = URL.createObjectURL(videoBlob);
+        
+        // GENERATE THUMBNAIL FOR DISC
+        let thumbUrl = null;
+        try {
+            const tempFile = new File([videoBlob], "demo_thumb_gen.mp4", { type: "video/mp4" });
+            thumbUrl = await generateVideoThumbnail(tempFile);
+        } catch (e) {
+            console.warn("Failed to generate demo thumbnail", e);
+        }
+
+        setCurrentSongMetadata({
+            id: id,
+            file: new File([], id),
+            name: demoTitle,
+            thumbnailUrl: thumbUrl,
+            type: 'video'
+        });
+
         setLocalVideoSrc(videoUrl);
         setMediaType('video');
         setSoundProfile('rock');
@@ -649,6 +723,15 @@ const App: React.FC = () => {
         const wavBlob = bufferToWave(audioBuf, audioBuf.length);
         const audioUrl = URL.createObjectURL(wavBlob);
         
+        // Fallback metadata without custom thumb
+        setCurrentSongMetadata({
+            id: id,
+            file: new File([], id),
+            name: demoTitle,
+            thumbnailUrl: null,
+            type: 'audio'
+        });
+
         setLocalVideoSrc(audioUrl);
         setMediaType('audio'); 
         setSoundProfile('rock');
@@ -727,6 +810,8 @@ const App: React.FC = () => {
               type: isVideo ? 'video' : 'audio'
           };
           setSongList(prev => [...prev, newSong]); 
+          // SAVE TO INDEXED DB
+          saveSongToDB(newSong).catch(e => console.error("Save failed", e)); 
           handleFileSelect(file, newSong);
       }
   };
@@ -747,17 +832,51 @@ const App: React.FC = () => {
               if (isVideo) {
                  try { thumb = await generateVideoThumbnail(file); } catch (err) {}
               }
-              loadedSongs.push({
+              const song: SongMetadata = {
                   id: `${Date.now()}-${i}-${file.name}`,
                   file: file,
                   name: file.name,
                   thumbnailUrl: thumb,
                   type: isVideo ? 'video' : 'audio'
-              });
+              };
+              loadedSongs.push(song);
+              // SAVE EACH SONG TO DB
+              saveSongToDB(song).catch(e => console.error("Save failed", e));
           }
       }
       setSongList(prev => [...prev, ...loadedSongs]);
       setIsLoadingFolder(false);
+  };
+
+  const handleClearPlaylist = async () => {
+      // 1. Force Clear State IMMEDIATELY
+      setSongList([]);
+      setLocalFileName("");
+      setAnalyzedNotes(null);
+      setCurrentSongMetadata(null);
+      
+      // Stop Audio
+      stopPreview();
+      
+      if (localVideoSrc) {
+           try { URL.revokeObjectURL(localVideoSrc); } catch(e) {}
+      }
+      setLocalVideoSrc("");
+
+      if (mediaRef.current) {
+          try {
+              mediaRef.current.pause();
+              mediaRef.current.src = "";
+          } catch(e) {}
+      }
+      
+      try {
+          playUiSound('select');
+          // 2. Clear DB background
+          await clearAllSongsFromDB();
+      } catch (e) {
+          console.error("Clear playlist error", e);
+      }
   };
 
   // Re-analyze when level/key changes
@@ -920,6 +1039,11 @@ const App: React.FC = () => {
 
     playHitSound(laneIndex);
 
+    // HAPTIC FEEDBACK FOR TOUCH (Mobile App Vibrate Fix)
+    if (isMobile && typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(50); } catch(e) {}
+    }
+
     // TIME SYNC FIX (UPDATED FOR START OFFSET)
     let elapsed = 0;
     if (mediaRef.current && !mediaRef.current.paused) {
@@ -972,7 +1096,6 @@ const App: React.FC = () => {
             } else {
                 setScore(s => s + 10);
                 setFeedback({ text: "10%", color: "text-yellow-400", id: Date.now() });
-                if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
             }
 
             setCombo(c => {
@@ -1185,9 +1308,19 @@ const App: React.FC = () => {
     initAudio();
     playUiSound('select');
     stopPreview(); 
+    
+    // Close Mobile Setup if open
+    setShowMobileSetup(false);
 
     if (!localVideoSrc) { alert("Please select a track first."); return; }
     if (!analyzedNotes) { alert("Please wait for analysis to complete."); return; }
+
+    // FORCE UNPAUSE if needed
+    if (status === GameStatus.PAUSED) {
+        // Just reset pause vars
+        pauseTimeRef.current = 0;
+        totalPauseDurationRef.current = 0;
+    }
 
     setStartCountdown(3);
     let count = 3;
@@ -1245,9 +1378,18 @@ const App: React.FC = () => {
   const quitGame = () => { playUiSound('select'); setStatus(GameStatus.MENU); setHitEffects([]); };
   const DIFFICULTY_OPTIONS = [ { label: t.EASY, value: 7, color: 'bg-green-500 shadow-green-500/50' }, { label: t.NORMAL, value: 8, color: 'bg-yellow-500 shadow-yellow-500/50' }, { label: t.HARD, value: 9, color: 'bg-orange-500 shadow-orange-500/50' }, { label: t.EXPERT, value: 10, color: 'bg-red-500 shadow-red-500/50' } ];
   
-  // ... (Keep Render methods: renderLanes, renderGameFrame, getPositionClass, and MAIN RETURN) ...
-  // Re-pasting just the main return structure for completeness if needed, but it's largely unchanged UI-wise
-  
+  // Reusable Settings Component to avoid duplication between Desktop Right Column and Mobile Modal
+  const SettingsPanelContent = () => (
+      <div className="flex flex-col space-y-4">
+         <div className="bg-slate-900/80 border border-slate-700 p-4 rounded-lg backdrop-blur-md shadow-lg flex flex-col space-y-2">
+             <div><div className={`text-xs font-bold text-slate-500 mb-2 tracking-widest ${fontClass}`}>{t.LEVEL}</div><div className="flex gap-2 h-10">{DIFFICULTY_OPTIONS.map((diff) => { const active = level === diff.value; return ( <button key={diff.value} onClick={() => { setLevel(diff.value); playUiSound('select'); }} className={`flex-1 flex flex-col justify-end p-1 rounded transition-all relative overflow-hidden group border ${active ? 'border-white/50' : 'border-transparent'}`}><div className={`absolute inset-0 opacity-20 ${diff.color}`}></div><div className={`w-full transition-all duration-300 ${active ? 'h-full opacity-100' : 'h-1/3 opacity-40 group-hover:h-1/2'} ${diff.color}`}></div><span className={`relative z-10 text-[10px] md:text-xs font-bold text-center mt-1 truncate ${active ? 'text-white' : 'text-slate-500'} ${fontClass}`}>{diff.label}</span></button> ) })}</div></div>
+             <div><div className={`text-xs font-bold text-slate-500 mb-2 tracking-widest ${fontClass}`}>{t.KEY_MODE_LABEL || "KEY CONFIGURATION"}</div><div className="flex gap-2 h-10">{[4, 5, 7].map((k) => { const active = keyMode === k; return ( <button key={k} onClick={()=>{setKeyMode(k as any);playUiSound('select')}} className={`flex-1 relative overflow-hidden rounded border transition-all duration-200 flex items-center justify-center ${active ? 'bg-cyan-900/50 border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'bg-slate-800 border-slate-700 hover:border-cyan-600'}`}><div className={`text-xl font-black italic ${active ? 'text-white' : 'text-slate-500 group-hover:text-cyan-200'}`}>{k}Key</div><div className={`text-[10px] ml-1 font-bold ${active ? 'text-cyan-400' : 'text-slate-600'}`}>MODE</div></button> ); })}</div></div>
+             <div><div className={`text-xs font-bold text-slate-500 mb-1 ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="flex items-center bg-black rounded border border-slate-700 p-1"><button onClick={()=>{setSpeedMod(Math.max(1,speedMod-0.5));playUiSound('select')}} className="w-10 h-8 bg-slate-800 text-slate-400 hover:text-white font-bold rounded">-</button><div className="flex-1 text-center font-mono text-cyan-400 font-bold text-lg">{speedMod.toFixed(1)}</div><button onClick={()=>{setSpeedMod(Math.min(10,speedMod+0.5));playUiSound('select')}} className="w-10 h-8 bg-slate-800 text-slate-400 hover:text-white font-bold rounded">+</button></div></div>
+         </div>
+         <button ref={mobileSetupStartBtnRef} onClick={startCountdownSequence} disabled={isAnalyzing || !analyzedNotes} onMouseEnter={() => playUiSound('hover')} className={`group relative w-full h-14 flex flex-col items-center justify-center transform transition-all duration-200 active:scale-95 ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer'}`}><div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 transform -skew-x-2 border-2 border-white/20 shadow-[0_0_30px_rgba(6,182,212,0.5)] group-hover:shadow-[0_0_60px_rgba(6,182,212,0.8)] transition-shadow rounded"></div><div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 mix-blend-overlay"></div><div className="relative z-10 text-center transform -skew-x-2">{isAnalyzing ? ( <div className="flex items-center gap-4"><div className="text-xl font-black text-white animate-pulse">SYSTEM ANALYZING</div><div className="w-24 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-white animate-progress"></div></div></div> ) : ( <><div className={`text-2xl font-black italic text-white tracking-tighter drop-shadow-lg ${fontClass}`}>{t.GAME_START}</div></> )}</div></button>
+      </div>
+  );
+
   const renderLanes = () => (
     <div 
         ref={laneContainerRef}
@@ -1292,7 +1434,7 @@ const App: React.FC = () => {
                     {renderLanes()}
                     <div className="w-6 bg-slate-900/80 border-l border-slate-700 relative flex flex-col justify-end p-0.5"><div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`}>{t.GROOVE}</div><div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700"><div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div></div><div className={`mt-1 w-full h-1 ${health > 90 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`}></div></div>
                 </div>
-                <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner">
+                <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner pb-[env(safe-area-inset-bottom)]">
                         <div className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left">
                             <div className={`text-[8px] text-slate-400 font-bold ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="text-sm font-display text-white">{speedMod.toFixed(2)}</div>
                         </div>
@@ -1306,25 +1448,25 @@ const App: React.FC = () => {
     } else if (currentThemeId === 'titan') {
         return (
              <div className="relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden bg-slate-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(245,158,11,0.1)] flex flex-col border-x-8 border-slate-800/50">
-                <div className="w-full h-16 bg-slate-800/80 border-b-2 border-amber-600/50 flex items-center justify-between px-4 relative"><div className="absolute bottom-0 left-0 w-full h-1 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#f59e0b_10px,#f59e0b_20px)] opacity-50"></div><div className="flex flex-col"><div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SYSTEM_INTEGRITY}</div><div className="w-32 h-3 bg-slate-950 border border-slate-600 mt-1"><div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-amber-500'}`} style={{width: `${health}%`}}></div></div></div><div className="text-right"><div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SCORE_OUTPUT}</div><div className="text-2xl font-mono font-bold text-amber-100">{score.toString().padStart(7, '0')}</div></div></div>
+                <div className="w-full h-16 bg-slate-800/80 border-b-2 border-amber-600/50 flex items-center justify-between px-4 relative pt-[env(safe-area-inset-top)]"><div className="absolute bottom-0 left-0 w-full h-1 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#f59e0b_10px,#f59e0b_20px)] opacity-50"></div><div className="flex flex-col"><div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SYSTEM_INTEGRITY}</div><div className="w-32 h-3 bg-slate-950 border border-slate-600 mt-1"><div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-amber-500'}`} style={{width: `${health}%`}}></div></div></div><div className="text-right"><div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SCORE_OUTPUT}</div><div className="text-2xl font-mono font-bold text-amber-100">{score.toString().padStart(7, '0')}</div></div></div>
                 <div className="flex-1 relative bg-slate-900/10 border-l border-r border-slate-800"><div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle, #78716c 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>{renderLanes()}</div>
-                <div className="h-4 bg-slate-800/80 border-t-2 border-amber-600/30 flex justify-center"><div className="w-1/3 h-full bg-slate-700/80 rounded-b-lg"></div></div>
+                <div className="h-4 bg-slate-800/80 border-t-2 border-amber-600/30 flex justify-center pb-[env(safe-area-inset-bottom)]"><div className="w-1/3 h-full bg-slate-700/80 rounded-b-lg"></div></div>
             </div>
         );
     } else if (currentThemeId === 'queen') {
         return (
             <div className="relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden bg-gradient-to-b from-black/50 via-purple-950/40 to-pink-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(236,72,153,0.3)] flex flex-col border-x-4 border-pink-800/50">
-                <div className="w-full py-4 px-6 flex justify-between items-center bg-black/40 backdrop-blur-md border-b border-pink-800"><div className="flex flex-col"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.GRACE}</div><div className="w-32 h-2 bg-purple-950 border border-purple-700 rounded-full mt-1 overflow-hidden"><div className={`h-full transition-all duration-200 bg-gradient-to-r from-purple-600 to-pink-500`} style={{width: `${health}%`}}></div></div></div><div className="flex flex-col items-end"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.POWER}</div><div className="text-3xl font-display font-bold text-pink-100 drop-shadow-[0_0_10px_rgba(236,72,153,0.8)]">{score.toString().padStart(7, '0')}</div></div></div>
+                <div className="w-full py-4 px-6 flex justify-between items-center bg-black/40 backdrop-blur-md border-b border-pink-800 pt-[calc(1rem+env(safe-area-inset-top))]"><div className="flex flex-col"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.GRACE}</div><div className="w-32 h-2 bg-purple-950 border border-purple-700 rounded-full mt-1 overflow-hidden"><div className={`h-full transition-all duration-200 bg-gradient-to-r from-purple-600 to-pink-500`} style={{width: `${health}%`}}></div></div></div><div className="flex flex-col items-end"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.POWER}</div><div className="text-3xl font-display font-bold text-pink-100 drop-shadow-[0_0_10px_rgba(236,72,153,0.8)]">{score.toString().padStart(7, '0')}</div></div></div>
                 <div className="flex-1 relative flex"><div className="w-2 h-full bg-gradient-to-b from-purple-900/50 via-pink-900/50 to-purple-900/50"></div><div className="flex-1 relative bg-black/10"><div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(135deg, #be185d 25%, transparent 25%), linear-gradient(225deg, #be185d 25%, transparent 25%), linear-gradient(45deg, #be185d 25%, transparent 25%), linear-gradient(315deg, #be185d 25%, transparent 25%)', backgroundPosition: '10px 0, 10px 0, 0 0, 0 0', backgroundSize: '20px 20px', backgroundRepeat: 'repeat'}}></div>{renderLanes()}</div><div className="w-2 h-full bg-gradient-to-b from-purple-900/50 via-pink-900/50 to-purple-900/50"></div></div>
-                 <div className="h-2 w-full bg-gradient-to-r from-purple-900 via-pink-600 to-purple-900"></div>
+                 <div className="h-2 w-full bg-gradient-to-r from-purple-900 via-pink-600 to-purple-900 mb-[env(safe-area-inset-bottom)]"></div>
             </div>
         );
     } else {
         return (
             <div className="relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden border-x-[4px] border-slate-800/50 bg-black/30 backdrop-blur-md shadow-[0_0_60px_rgba(6,182,212,0.2)] flex flex-col">
-                <div className="w-full flex justify-between items-start p-4 bg-gradient-to-b from-slate-900/80 to-transparent z-30 pointer-events-none border-b border-white/10"><div className="w-1/3"><div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.INTEGRITY}</div><div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-600"><div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-cyan-500'}`} style={{width: `${health}%`}}></div></div></div><div className="w-1/3 text-right"><div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.SCORE}</div><div className="text-4xl font-mono text-white glow-text">{score.toString().padStart(7, '0')}</div></div></div>
+                <div className="w-full flex justify-between items-start p-4 bg-gradient-to-b from-slate-900/80 to-transparent z-30 pointer-events-none border-b border-white/10 pt-[calc(1rem+env(safe-area-inset-top))]"><div className="w-1/3"><div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.INTEGRITY}</div><div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-600"><div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-cyan-500'}`} style={{width: `${health}%`}}></div></div></div><div className="w-1/3 text-right"><div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.SCORE}</div><div className="text-4xl font-mono text-white glow-text">{score.toString().padStart(7, '0')}</div></div></div>
                 <div className="flex-1 relative bg-black/10 backdrop-blur-sm">{renderLanes()}</div>
-                <div className="h-2 bg-gradient-to-r from-cyan-500 to-blue-500 w-full shadow-[0_0_20px_rgba(6,182,212,0.5)]"></div>
+                <div className="h-2 bg-gradient-to-r from-cyan-500 to-blue-500 w-full shadow-[0_0_20px_rgba(6,182,212,0.5)] mb-[env(safe-area-inset-bottom)]"></div>
             </div>
         );
     }
@@ -1339,7 +1481,7 @@ const App: React.FC = () => {
   return (
     <div className={`fixed inset-0 w-full h-[100dvh] bg-black overflow-hidden text-slate-100 select-none touch-none ${isShaking ? 'animate-[shake_0.2s_ease-in-out]' : ''}`}>
       {showMobileStart && (
-         <div className="absolute inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-8 text-center cursor-pointer" onClick={handleMobileEnter}>
+         <div className="absolute inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-8 pb-[env(safe-area-inset-bottom)] text-center cursor-pointer" onClick={handleMobileEnter}>
             <div className="relative w-24 h-24 mb-8"><div className="absolute inset-0 border-4 border-cyan-500 rounded-full animate-ping opacity-50"></div><div className="absolute inset-0 border-4 border-cyan-400 rounded-full flex items-center justify-center bg-cyan-900/20 backdrop-blur-md"><span className="text-3xl">👆</span></div></div>
             <h1 className={`text-2xl md:text-3xl font-black italic text-white mb-4 animate-pulse tracking-widest ${fontClass}`}>{t.WELCOME_TITLE}</h1>
             <div className="max-w-md bg-slate-900/50 border border-slate-700 p-4 rounded-lg mb-8 backdrop-blur-sm"><p className={`text-slate-300 text-sm md:text-base whitespace-pre-line leading-relaxed ${fontClass}`}>{t.WELCOME_DESC}</p></div>
@@ -1378,7 +1520,7 @@ const App: React.FC = () => {
       <div className="scanlines z-50 pointer-events-none opacity-40"></div>
       
       {(status === GameStatus.TITLE || status === GameStatus.MENU) && !showMobileStart && (
-        <button onClick={() => setIsBgMusicMuted(!isBgMusicMuted)} className="absolute bottom-4 right-4 z-[70] p-2 bg-black/50 hover:bg-black/80 text-cyan-400 border border-cyan-500 rounded-full transition-all active:scale-95" title="Toggle Intro Music">
+        <button onClick={() => setIsBgMusicMuted(!isBgMusicMuted)} className="absolute bottom-4 right-4 z-[70] p-2 bg-black/50 hover:bg-black/80 text-cyan-400 border border-cyan-500 rounded-full transition-all active:scale-95 mb-[env(safe-area-inset-bottom)] mr-[env(safe-area-inset-right)]" title="Toggle Intro Music">
             {isBgMusicMuted ? ( <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clipRule="evenodd" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg> ) : ( <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg> )}
         </button>
       )}
@@ -1404,21 +1546,35 @@ const App: React.FC = () => {
                   <button onClick={() => { setShowKeyConfig(true); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className="group relative w-64 h-14 bg-gradient-to-r from-slate-800/80 via-yellow-900 to-slate-800/80 border-x-4 border-yellow-500 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden"><div className="flex flex-col items-center justify-center h-full transform skew-x-12"><span className={`text-xl font-bold text-slate-300 group-hover:text-yellow-200 ${fontClass}`}>{t.SETTING}</span></div></button>
                   <button onClick={() => window.location.reload()} onMouseEnter={() => playUiSound('hover')} className="group relative w-64 h-14 bg-gradient-to-r from-slate-800/80 via-red-900 to-slate-800/80 border-x-4 border-red-500 transform -skew-x-12 hover:scale-105 transition-all duration-200 overflow-hidden"><div className="flex flex-col items-center justify-center h-full transform skew-x-12"><span className={`text-lg font-bold text-slate-300 group-hover:text-red-200 ${fontClass}`}>{t.EXIT}</span></div></button>
                </div>
-              <div className="absolute bottom-8 w-full text-center"><p className="text-xs text-slate-500 font-mono">VER 2.5.0 // CREATED BY : IGNORE</p><p className="text-xs text-slate-600 font-mono mt-1">© 2024 DJBIG PROJECT. ALL RIGHTS RESERVED.</p></div>
+              <div className="absolute bottom-8 w-full text-center pb-[env(safe-area-inset-bottom)]"><p className="text-xs text-slate-500 font-mono">VER 2.5.0 // CREATED BY : IGNORE</p><p className="text-xs text-slate-600 font-mono mt-1">© 2024 DJBIG PROJECT. ALL RIGHTS RESERVED.</p></div>
           </div>
       )}
 
       {status === GameStatus.MENU && !startCountdown && (
         <div className="relative z-30 w-full h-full flex flex-col md:flex-row animate-fade-in bg-slate-900/40 backdrop-blur-md overflow-y-auto md:overflow-hidden">
           <div className="md:hidden sticky top-0 left-0 w-full min-h-[4rem] bg-slate-900 flex items-center justify-between px-4 z-50 border-b border-slate-700 shrink-0 pt-[max(2rem,env(safe-area-inset-top))] pb-2">
-             <button onClick={() => { setStatus(GameStatus.TITLE); stopPreview(); }} className="text-white">← BACK</button>
-             <div className="text-cyan-400 font-bold">MUSIC SELECT</div>
+             <button onClick={() => { setStatus(GameStatus.TITLE); stopPreview(); }} className="text-white font-bold text-sm flex items-center gap-1">← {t.BACK}</button>
+             <div className="flex items-center gap-3">
+                {songList.length > 0 && (
+                     <button onClick={handleClearPlaylist} className={`text-[10px] text-red-400 font-bold border border-red-900/50 px-2 py-1 rounded bg-red-900/10 hover:bg-red-900/30 ${fontClass}`}>
+                        {t.CLEAR_PLAYLIST}
+                     </button>
+                )}
+                <div className="text-cyan-400 font-bold text-sm hidden sm:block">MUSIC SELECT</div>
+            </div>
           </div>
-          <div className="w-full md:w-[55%] h-auto md:h-full flex flex-col bg-slate-950/80 border-r border-slate-700/50 pt-0 md:pt-0 relative shrink-0 md:overflow-hidden">
-             <div className="hidden md:flex h-24 items-end pb-4 px-8 border-b border-cyan-500/30 bg-gradient-to-b from-slate-900 to-transparent shrink-0"><h2 className={`text-4xl font-black italic text-white tracking-tighter ${fontClass} drop-shadow-md`}>SELECT <span className="text-cyan-400">MUSIC</span></h2></div>
+          <div className={`w-full ${isMobile ? 'h-full' : 'md:w-[55%]'} h-auto md:h-full flex flex-col bg-slate-950/80 border-r border-slate-700/50 pt-0 md:pt-0 relative shrink-0 md:overflow-hidden pb-24 md:pb-0`}>
+             <div className="hidden md:flex h-24 items-end justify-between pb-4 px-8 border-b border-cyan-500/30 bg-gradient-to-b from-slate-900 to-transparent shrink-0">
+                <h2 className={`text-4xl font-black italic text-white tracking-tighter ${fontClass} drop-shadow-md`}>SELECT <span className="text-cyan-400">MUSIC</span></h2>
+                {songList.length > 0 && (
+                    <button onClick={handleClearPlaylist} className={`text-xs font-bold text-red-500 hover:text-red-300 transition-colors tracking-widest border border-red-900/50 hover:border-red-500 px-3 py-1 rounded uppercase bg-slate-900/50 ${fontClass}`}>
+                        {t.CLEAR_PLAYLIST}
+                    </button>
+                )}
+             </div>
              <div className="w-full md:flex-1 md:overflow-y-auto custom-scrollbar p-0 space-y-1">
                  {/* Demo Tracks */}
-                 <div onClick={() => loadDemoTrack('/demoplay.mp4', 'DEMO_TRACK_01')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_01" ? 'bg-gradient-to-r from-green-900/80 to-transparent border-green-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-green-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                 <div onClick={(e) => { loadDemoTrack('/demoplay.mp4', 'DEMO_TRACK_01'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_01" ? 'bg-gradient-to-r from-green-900/80 to-transparent border-green-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-green-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
                     <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_01" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
                         <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
                         <div className={`w-full h-full bg-gradient-to-tr from-green-500 to-emerald-700 opacity-80`}></div>
@@ -1427,7 +1583,7 @@ const App: React.FC = () => {
                     <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_01} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_01" ? 'text-white' : 'text-slate-400 group-hover:text-green-200'}`} /><div className="text-xs font-mono text-green-600/70">HIGH SPEED ROCK // 175 BPM</div></div>{localFileName === "DEMO_TRACK_01" && <div className="text-green-400 text-xl animate-pulse">◀</div>}
                  </div>
                  
-                 <div onClick={() => loadDemoTrack('/demoplay02.mp4', 'DEMO_TRACK_02')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_02" ? 'bg-gradient-to-r from-amber-900/80 to-transparent border-amber-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-amber-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                 <div onClick={(e) => { loadDemoTrack('/demoplay02.mp4', 'DEMO_TRACK_02'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_02" ? 'bg-gradient-to-r from-amber-900/80 to-transparent border-amber-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-amber-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
                     <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_02" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
                         <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
                         <div className={`w-full h-full bg-gradient-to-tr from-amber-500 to-orange-700 opacity-80`}></div>
@@ -1436,7 +1592,7 @@ const App: React.FC = () => {
                     <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_02} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_02" ? 'text-white' : 'text-slate-400 group-hover:text-amber-200'}`} /><div className="text-xs font-mono text-amber-600/70">ALTERNATIVE MIX // 140 BPM</div></div>{localFileName === "DEMO_TRACK_02" && <div className="text-amber-400 text-xl animate-pulse">◀</div>}
                  </div>
 
-                 <div onClick={() => loadDemoTrack('/demoplay03.mp4', 'DEMO_TRACK_03')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_03" ? 'bg-gradient-to-r from-purple-900/80 to-transparent border-purple-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-purple-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                 <div onClick={(e) => { loadDemoTrack('/demoplay03.mp4', 'DEMO_TRACK_03'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_03" ? 'bg-gradient-to-r from-purple-900/80 to-transparent border-purple-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-purple-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
                     <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_03" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
                         <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
                         <div className={`w-full h-full bg-gradient-to-tr from-purple-500 to-fuchsia-700 opacity-80`}></div>
@@ -1445,7 +1601,7 @@ const App: React.FC = () => {
                     <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_03} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_03" ? 'text-white' : 'text-slate-400 group-hover:text-purple-200'}`} /><div className="text-xs font-mono text-purple-600/70">ELECTRONIC CORE // 150 BPM</div></div>{localFileName === "DEMO_TRACK_03" && <div className="text-purple-400 text-xl animate-pulse">◀</div>}
                  </div>
 
-                 <div onClick={() => loadDemoTrack('/demoplay04.mp4', 'DEMO_TRACK_04')} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_04" ? 'bg-gradient-to-r from-rose-900/80 to-transparent border-rose-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-rose-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                 <div onClick={(e) => { loadDemoTrack('/demoplay04.mp4', 'DEMO_TRACK_04'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_04" ? 'bg-gradient-to-r from-rose-900/80 to-transparent border-rose-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-rose-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
                     <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_04" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
                         <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
                         <div className={`w-full h-full bg-gradient-to-tr from-rose-500 to-pink-700 opacity-80`}></div>
@@ -1457,7 +1613,7 @@ const App: React.FC = () => {
                  {songList.map((song, idx) => {
                      const isActive = localFileName === song.name;
                      return (
-                        <div key={song.id} onClick={() => { handleFileSelect(song.file, song); playUiSound('select'); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${isActive ? 'bg-gradient-to-r from-cyan-900/80 to-transparent border-cyan-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-cyan-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                        <div key={song.id} onClick={(e) => { handleFileSelect(song.file, song); playUiSound('select'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${isActive ? 'bg-gradient-to-r from-cyan-900/80 to-transparent border-cyan-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-cyan-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
                             <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${isActive ? 'border-white animate-spin-slow' : 'border-slate-700'} bg-black/50 overflow-hidden shrink-0 shadow-lg`}>
                                 {song.thumbnailUrl ? (
                                     <img src={song.thumbnailUrl} className="w-full h-full object-cover" alt="Cover" />
@@ -1466,7 +1622,6 @@ const App: React.FC = () => {
                                         <div className="text-[8px] font-bold text-slate-400 text-center leading-none rotate-45">DJ<br/>BIG</div>
                                     </div>
                                 )}
-                                {/* Center hole for vinyl look */}
                                 <div className="absolute w-3 h-3 bg-slate-900 rounded-full border border-slate-600 z-10"></div>
                             </div>
                             <div className="flex-1 min-w-0 overflow-hidden"><MarqueeText text={song.name} className={`text-lg font-bold ${fontClass} ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-cyan-200'}`} /><div className="text-xs font-mono text-slate-600 group-hover:text-cyan-600/70 uppercase">{song.type.toUpperCase()} FILE</div></div>
@@ -1474,33 +1629,76 @@ const App: React.FC = () => {
                      );
                  })}
              </div>
-             <div className="bg-black/80 p-4 border-t border-slate-700 flex gap-2 shrink-0">
+
+            {/* MOBILE: Floating Play Button */}
+            {isMobile && currentSongMetadata && !showMobileSetup && (
+                <div className="fixed bottom-[calc(1.5rem+env(safe-area-inset-bottom))] left-0 w-full px-4 z-50">
+                    <button 
+                        onClick={() => { 
+                            playUiSound('select'); 
+                            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                                try { navigator.vibrate(50); } catch(e) {}
+                            }
+                            setShowMobileSetup(true); 
+                        }}
+                        className="w-full h-16 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.6)] flex items-center justify-center border-2 border-white/20 animate-bounce-short hover:scale-105 transition-transform"
+                    >
+                        <span className={`text-2xl font-black italic text-white mr-2 ${fontClass}`}>PLAY</span>
+                        <span className="text-white/80 font-mono text-sm truncate max-w-[150px]">{currentSongMetadata.name}</span>
+                    </button>
+                </div>
+            )}
+             
+             {/* FOOTER BUTTONS */}
+             <div className="bg-black/80 p-4 border-t border-slate-700 flex gap-2 shrink-0 z-40 relative pb-[calc(1rem+env(safe-area-inset-bottom))]">
                 <label className="flex-1 h-12 bg-slate-800 hover:bg-cyan-900/50 border border-slate-600 hover:border-cyan-500 rounded flex items-center justify-center cursor-pointer transition-colors group"><span className={`text-xs font-bold text-slate-400 group-hover:text-cyan-400 ${fontClass}`}>+ {t.LOAD_SINGLE}</span><input type="file" accept="video/*,audio/*" onChange={handleSingleFileUpload} className="hidden" /></label>
                 <label className="flex-1 h-12 bg-slate-800 hover:bg-fuchsia-900/50 border border-slate-600 hover:border-fuchsia-500 rounded flex items-center justify-center cursor-pointer transition-colors group"><span className={`text-xs font-bold text-slate-400 group-hover:text-fuchsia-400 ${fontClass}`}>+ {t.LOAD_FOLDER}</span><input type="file" multiple onChange={handleFolderSelect} className="hidden" {...({ webkitdirectory: "", directory: "" } as any)} /></label>
              </div>
           </div>
-          <div className="w-full md:w-[45%] h-auto md:h-full relative flex flex-col p-4 md:p-6 justify-between shrink-0 md:overflow-hidden pb-32 md:pb-6">
-             <div className="hidden md:flex w-full justify-between items-start mb-4 z-20 shrink-0"><button onClick={() => { setStatus(GameStatus.TITLE); playUiSound('select'); stopPreview(); }} className="flex items-center space-x-2 text-slate-500 hover:text-white transition-colors group"><div className="w-8 h-8 rounded-full border border-slate-600 group-hover:border-white flex items-center justify-center">←</div><span className={`font-bold tracking-widest ${fontClass}`}>{t.BACK}</span></button><div className="flex space-x-4"><button onClick={() => { setShowKeyConfig(true); playUiSound('select'); }} className="text-slate-500 hover:text-yellow-400 font-bold text-sm tracking-widest">{t.SETTING}</button></div></div>
-             <div className="hidden md:flex absolute inset-0 items-center justify-center opacity-30 pointer-events-none z-0"><div className="w-[80vw] h-[80vw] md:w-[600px] md:h-[600px] border border-cyan-500/20 rounded-full animate-[spin_60s_linear_infinite] border-dashed"></div><div className="absolute w-[60vw] h-[60vw] md:w-[450px] md:h-[450px] border border-white/5 rounded-full animate-[spin-ccw_40s_linear_infinite]"></div></div>
-             <div className="relative z-10 flex flex-col items-center justify-center flex-1 my-8 md:my-0 min-h-0">
-                 <div className="relative w-40 h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 mb-6 group shrink-0"><div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl animate-pulse"></div><div className="relative w-full h-full rounded-full border-4 border-slate-800 bg-black overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-[spin_10s_linear_infinite]">{currentSongMetadata?.thumbnailUrl ? ( <img src={currentSongMetadata.thumbnailUrl} className="w-full h-full object-cover opacity-80" alt="Cover" /> ) : ( <div className="w-full h-full bg-gradient-to-tr from-slate-800 to-slate-900 flex items-center justify-center"><div className="w-1/3 h-1/3 bg-cyan-500 rounded-full blur-md"></div></div> )}<div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div></div><div className="absolute top-1/2 left-1/2 w-8 h-8 bg-slate-900 rounded-full transform -translate-x-1/2 -translate-y-1/2 border-2 border-slate-600 z-20"></div></div>
-                 <div className="text-center w-full max-w-lg shrink-0"><h1 className={`text-3xl md:text-5xl font-black italic text-white tracking-tighter drop-shadow-[0_0_20px_rgba(6,182,212,0.8)] mb-2 ${fontClass}`}>{localFileName ? ( <MarqueeText text={localFileName} /> ) : t.SELECT_SOURCE}</h1>{localFileName && ( <div className="inline-block bg-cyan-900/30 border border-cyan-500/30 px-4 py-1 rounded-full text-cyan-400 font-mono text-sm tracking-widest">{isPlayingPreview ? 'PREVIEWING...' : 'READY TO START'}</div> )}</div>
-             </div>
-             <div className="relative z-20 mt-4 md:mt-0 space-y-4 pb-8 md:pb-0 shrink-0">
-                 <div className="bg-slate-900/80 border border-slate-700 p-4 rounded-lg backdrop-blur-md shadow-lg flex flex-col space-y-2">
-                     <div><div className={`text-xs font-bold text-slate-500 mb-2 tracking-widest ${fontClass}`}>{t.LEVEL}</div><div className="flex gap-2 h-10">{DIFFICULTY_OPTIONS.map((diff) => { const active = level === diff.value; return ( <button key={diff.value} onClick={() => { setLevel(diff.value); playUiSound('select'); }} className={`flex-1 flex flex-col justify-end p-1 rounded transition-all relative overflow-hidden group border ${active ? 'border-white/50' : 'border-transparent'}`}><div className={`absolute inset-0 opacity-20 ${diff.color}`}></div><div className={`w-full transition-all duration-300 ${active ? 'h-full opacity-100' : 'h-1/3 opacity-40 group-hover:h-1/2'} ${diff.color}`}></div><span className={`relative z-10 text-[10px] md:text-xs font-bold text-center mt-1 truncate ${active ? 'text-white' : 'text-slate-500'} ${fontClass}`}>{diff.label}</span></button> ) })}</div></div>
-                     <div><div className={`text-xs font-bold text-slate-500 mb-2 tracking-widest ${fontClass}`}>{t.KEY_MODE_LABEL || "KEY CONFIGURATION"}</div><div className="flex gap-2 h-10">{[4, 5, 7].map((k) => { const active = keyMode === k; return ( <button key={k} onClick={()=>{setKeyMode(k as any);playUiSound('select')}} className={`flex-1 relative overflow-hidden rounded border transition-all duration-200 flex items-center justify-center ${active ? 'bg-cyan-900/50 border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'bg-slate-800 border-slate-700 hover:border-cyan-600'}`}><div className={`text-xl font-black italic ${active ? 'text-white' : 'text-slate-500 group-hover:text-cyan-200'}`}>{k}K</div><div className={`text-[10px] ml-1 font-bold ${active ? 'text-cyan-400' : 'text-slate-600'}`}>MODE</div></button> ); })}</div></div>
-                     <div><div className={`text-xs font-bold text-slate-500 mb-1 ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="flex items-center bg-black rounded border border-slate-700 p-1"><button onClick={()=>{setSpeedMod(Math.max(1,speedMod-0.5));playUiSound('select')}} className="w-10 h-8 bg-slate-800 text-slate-400 hover:text-white font-bold rounded">-</button><div className="flex-1 text-center font-mono text-cyan-400 font-bold text-lg">{speedMod.toFixed(1)}</div><button onClick={()=>{setSpeedMod(Math.min(10,speedMod+0.5));playUiSound('select')}} className="w-10 h-8 bg-slate-800 text-slate-400 hover:text-white font-bold rounded">+</button></div></div>
+          
+          {/* Right Column (Desktop) */}
+          {!isMobile && (
+            <div className="w-full md:w-[45%] h-auto md:h-full relative flex flex-col p-4 md:p-6 justify-between shrink-0 md:overflow-hidden pb-32 md:pb-6">
+                 <div className="hidden md:flex w-full justify-between items-start mb-4 z-20 shrink-0"><button onClick={() => { setStatus(GameStatus.TITLE); playUiSound('select'); stopPreview(); }} className="flex items-center space-x-2 text-slate-500 hover:text-white transition-colors group"><div className="w-8 h-8 rounded-full border border-slate-600 group-hover:border-white flex items-center justify-center">←</div><span className={`font-bold tracking-widest ${fontClass}`}>{t.BACK}</span></button><div className="flex space-x-4"><button onClick={() => { setShowKeyConfig(true); playUiSound('select'); }} className="text-slate-500 hover:text-yellow-400 font-bold text-sm tracking-widest">{t.SETTING}</button></div></div>
+                 <div className="hidden md:flex absolute inset-0 items-center justify-center opacity-30 pointer-events-none z-0"><div className="w-[80vw] h-[80vw] md:w-[600px] md:h-[600px] border border-cyan-500/20 rounded-full animate-[spin_60s_linear_infinite] border-dashed"></div><div className="absolute w-[60vw] h-[60vw] md:w-[450px] md:h-[450px] border border-white/5 rounded-full animate-[spin-ccw_40s_linear_infinite]"></div></div>
+                 <div className="relative z-10 flex flex-col items-center justify-center flex-1 my-8 md:my-0 min-h-0">
+                     <div className="relative w-40 h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 mb-6 group shrink-0"><div className="absolute inset-0 bg-cyan-500/20 rounded-full blur-xl animate-pulse"></div><div className="relative w-full h-full rounded-full border-4 border-slate-800 bg-black overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-[spin_10s_linear_infinite]">{currentSongMetadata?.thumbnailUrl ? ( <img src={currentSongMetadata.thumbnailUrl} className="w-full h-full object-cover opacity-80" alt="Cover" /> ) : ( <div className="w-full h-full bg-gradient-to-tr from-slate-800 to-slate-900 flex items-center justify-center"><div className="w-1/3 h-1/3 bg-cyan-500 rounded-full blur-md"></div></div> )}<div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div></div><div className="absolute top-1/2 left-1/2 w-8 h-8 bg-slate-900 rounded-full transform -translate-x-1/2 -translate-y-1/2 border-2 border-slate-600 z-20"></div></div>
+                     <div className="text-center w-full max-w-lg shrink-0"><h1 className={`text-3xl md:text-5xl font-black italic text-white tracking-tighter drop-shadow-[0_0_20px_rgba(6,182,212,0.8)] mb-2 ${fontClass}`}>{localFileName ? ( <MarqueeText text={localFileName} /> ) : t.SELECT_SOURCE}</h1>{localFileName && ( <div className="inline-block bg-cyan-900/30 border border-cyan-500/30 px-4 py-1 rounded-full text-cyan-400 font-mono text-sm tracking-widest">{isPlayingPreview ? 'PREVIEWING...' : 'READY TO START'}</div> )}</div>
                  </div>
-                 <button onClick={startCountdownSequence} disabled={isAnalyzing || !analyzedNotes} onMouseEnter={() => playUiSound('hover')} className={`group relative w-full h-14 flex flex-col items-center justify-center transform transition-all duration-200 active:scale-95 ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer'}`}><div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 transform -skew-x-2 border-2 border-white/20 shadow-[0_0_30px_rgba(6,182,212,0.5)] group-hover:shadow-[0_0_60px_rgba(6,182,212,0.8)] transition-shadow rounded"></div><div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 mix-blend-overlay"></div><div className="relative z-10 text-center transform -skew-x-2">{isAnalyzing ? ( <div className="flex items-center gap-4"><div className="text-xl font-black text-white animate-pulse">SYSTEM ANALYZING</div><div className="w-24 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-white animate-progress"></div></div></div> ) : ( <><div className={`text-2xl font-black italic text-white tracking-tighter drop-shadow-lg ${fontClass}`}>{t.GAME_START}</div></> )}</div></button>
-             </div>
-          </div>
+                 <div className="relative z-20 mt-4 md:mt-0 space-y-4 pb-8 md:pb-0 shrink-0">
+                     <SettingsPanelContent />
+                 </div>
+            </div>
+          )}
+          
+          {/* MOBILE POPUP SETUP MODAL */}
+          {showMobileSetup && isMobile && (
+              <div className="fixed inset-0 z-[60] bg-slate-900/95 backdrop-blur-xl flex flex-col p-6 animate-fade-in overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+                  <button onClick={() => setShowMobileSetup(false)} className="absolute top-4 right-4 text-white p-2 z-50 bg-black/50 rounded-full border border-slate-600 mt-[env(safe-area-inset-top)] mr-[env(safe-area-inset-right)]">✕</button>
+                  
+                  <div className="flex flex-col items-center mb-6 mt-8 pt-[env(safe-area-inset-top)]">
+                       <div className="w-32 h-32 rounded-full border-4 border-cyan-500/50 overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.4)] mb-4 animate-[spin_20s_linear_infinite]">
+                           {currentSongMetadata?.thumbnailUrl ? (
+                               <img src={currentSongMetadata.thumbnailUrl} className="w-full h-full object-cover" alt="Cover" />
+                           ) : (
+                               <div className="w-full h-full bg-slate-800 flex items-center justify-center"><span className="text-cyan-500 font-bold">DJBIG</span></div>
+                           )}
+                       </div>
+                       <h2 className={`text-2xl font-black italic text-white text-center leading-none ${fontClass}`}>{currentSongMetadata?.name}</h2>
+                       <div className="text-cyan-400 text-xs font-mono mt-1">SETUP CONFIGURATION</div>
+                  </div>
+
+                  <div className="flex-1 w-full max-w-md mx-auto">
+                      <SettingsPanelContent />
+                  </div>
+              </div>
+          )}
+
         </div>
       )}
 
       {(status === GameStatus.PLAYING || status === GameStatus.PAUSED) && ( 
           <>
-            {/* Song Info & Deco Layer */}
             <div className={`absolute bottom-8 z-30 hidden md:flex flex-col pointer-events-none transition-all duration-500 ${layoutSettings.lanePosition === 'right' ? 'left-8 items-start' : 'right-8 items-end'}`}>
                 <div className="text-[5rem] font-black font-display italic tracking-tighter leading-none select-none mb-[-1rem] transform -skew-x-12 opacity-80"
                      style={{
@@ -1518,7 +1716,7 @@ const App: React.FC = () => {
                     />
                     <div className="flex gap-2 mt-1">
                         <span className="px-2 py-0.5 bg-black/60 border border-white/20 text-[10px] font-mono text-cyan-400 rounded">LV.{level}</span>
-                        <span className="px-2 py-0.5 bg-black/60 border border-white/20 text-[10px] font-mono text-fuchsia-400 rounded">{keyMode}K</span>
+                        <span className="px-2 py-0.5 bg-black/60 border border-white/20 text-[10px] font-mono text-fuchsia-400 rounded">{keyMode}Key</span>
                     </div>
                 </div>
             </div>
@@ -1526,7 +1724,7 @@ const App: React.FC = () => {
             <div className={`absolute inset-0 z-40 flex items-center ${getPositionClass()}`}>{renderGameFrame()}</div>
           </> 
       )}
-      {status === GameStatus.PAUSED && ( <PauseMenu onResume={togglePause} onSettings={() => setShowKeyConfig(true)} onQuit={quitGame} t={t} fontClass={fontClass} onTitleClick={handlePauseTitleClick} /> )}
+      {status === GameStatus.PAUSED && ( <PauseMenu onResume={togglePause} onRestart={startCountdownSequence} onSettings={() => setShowKeyConfig(true)} onQuit={quitGame} t={t} fontClass={fontClass} onTitleClick={handlePauseTitleClick} /> )}
       {status === GameStatus.FINISHED && ( <EndScreen stats={{ perfect: perfectCount, good: goodCount, miss: missCount, maxCombo: maxCombo, score: score }} fileName={currentSongMetadata?.name || "UNKNOWN"} onRestart={startCountdownSequence} onMenu={quitGame} t={t} fontClass={fontClass} onPlaySound={playUiSound} /> )}
     </div>
   );

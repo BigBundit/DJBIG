@@ -1,4 +1,5 @@
 
+
 export const TRANSLATIONS = {
     en: {
         // Title & Menu
@@ -71,6 +72,7 @@ export const TRANSLATIONS = {
         // Pause & End
         PAUSED: "GAME PAUSED",
         RESUME: "RESUME MISSION",
+        RESTART: "RESTART",
         SYSTEM_SETTING: "GAME SETTINGS",
         ABORT: "ABORT MISSION",
         MISSION_RESULTS: "MISSION RESULTS",
@@ -87,7 +89,7 @@ export const TRANSLATIONS = {
         THEME_SUB: "SELECT NOTE & LANE CONFIGURATION",
         CLOSE_SYSTEM: "CLOSE SYSTEM",
         LOCKED: "LOCKED",
-        EQUIPPED: "EQUIPPED",
+        EQUIPPED: "ใช้งานอยู่",
         THEMES_UNLOCKED: "THEMES UNLOCKED",
         KEEP_PLAYING: "KEEP PLAYING TO UNLOCK MORE VISUALS",
 
@@ -170,6 +172,7 @@ export const TRANSLATIONS = {
         // Pause & End
         PAUSED: "เกมหยุดชั่วคราว",
         RESUME: "ดำเนินการต่อ",
+        RESTART: "เริ่มใหม่",
         SYSTEM_SETTING: "ตั้งค่าเกม",
         ABORT: "ยกเลิกภารกิจ",
         MISSION_RESULTS: "ผลลัพธ์ภารกิจ",
