@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StatusBar } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -50,7 +51,8 @@ const DEFAULT_STATS: PlayerStats = {
 const DEFAULT_LAYOUT: LayoutSettings = {
     lanePosition: 'left',
     enableMenuBackground: true,
-    language: 'en'
+    language: 'en',
+    enableVibration: true
 };
 
 const START_OFFSET_MS = 3000; // 3 Seconds Silence/Delay at start
@@ -210,6 +212,8 @@ const App: React.FC = () => {
 
   // 2. Haptic Helper
   const triggerHaptic = useCallback(async (intensity: 'light' | 'medium' | 'heavy' = 'light') => {
+      if (layoutSettings.enableVibration === false) return;
+
       try {
           let style = ImpactStyle.Light;
           if (intensity === 'medium') style = ImpactStyle.Medium;
@@ -222,7 +226,7 @@ const App: React.FC = () => {
               navigator.vibrate(ms);
           }
       }
-  }, []);
+  }, [layoutSettings.enableVibration]);
 
   // Detect Mobile on Mount
   useEffect(() => {

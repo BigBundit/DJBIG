@@ -89,6 +89,7 @@ export interface LayoutSettings {
     lanePosition: 'left' | 'center' | 'right';
     enableMenuBackground?: boolean;
     language: 'en' | 'th';
+    enableVibration?: boolean;
 }
 
 // --- THEME SYSTEM TYPES ---

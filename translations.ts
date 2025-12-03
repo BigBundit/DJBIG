@@ -68,6 +68,7 @@ export const TRANSLATIONS = {
         SAVE_CLOSE: "SAVE & CLOSE",
         LANGUAGE: "LANGUAGE",
         PRESS_KEY: "PRESS KEY",
+        VIBRATION: "VIBRATION",
 
         // Pause & End
         PAUSED: "GAME PAUSED",
@@ -97,7 +98,7 @@ export const TRANSLATIONS = {
         DESC_IGNORE: "Advanced Handheld Simulation with tactical HUD.",
         DESC_NEON: "The Classic Interface. Optimized for pure visibility.",
         DESC_TITAN: "Heavy industrial interface with reinforced inputs.",
-        DESC_QUEEN: "Sophisticated royal interface in violet and pink.",
+        DESC_QUEEN: "Sophisticated royal interface in violet and gold.',",
         UNLOCK_DEFAULT: "Unlocked Default",
         UNLOCK_CUSTOM: "Unlocked via Customization"
     },
@@ -168,6 +169,7 @@ export const TRANSLATIONS = {
         SAVE_CLOSE: "บันทึกและปิด",
         LANGUAGE: "ภาษา",
         PRESS_KEY: "กดปุ่ม",
+        VIBRATION: "ระบบสั่น",
 
         // Pause & End
         PAUSED: "เกมหยุดชั่วคราว",

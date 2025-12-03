@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { KeyMapping, LaneConfig, AudioSettings, LayoutSettings } from '../types';
 import { LANE_CONFIGS_4, LANE_CONFIGS_5, LANE_CONFIGS_7 } from '../constants';
@@ -237,6 +238,14 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                     isActive={layoutSettings.language === 'en'} 
                                     onClick={() => { onPlaySound('select'); onLayoutSettingsChange({...layoutSettings, language: layoutSettings.language === 'en' ? 'th' : 'en'}); }}
                                     subLabels={['TH', 'EN']}
+                                />
+                                <CyberToggle
+                                    label={t.VIBRATION}
+                                    isActive={layoutSettings.enableVibration !== false}
+                                    onClick={() => { 
+                                        onPlaySound('select'); 
+                                        onLayoutSettingsChange({...layoutSettings, enableVibration: !layoutSettings.enableVibration}); 
+                                    }}
                                 />
                              </div>
 
