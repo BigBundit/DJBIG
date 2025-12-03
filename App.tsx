@@ -1,6 +1,7 @@
 
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { StatusBar } from '@capacitor/status-bar';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { 
   Note as NoteType, 
   ScoreRating, 
@@ -193,6 +194,36 @@ const App: React.FC = () => {
   // Visual State for React Render
   const [renderNotes, setRenderNotes] = useState<NoteType[]>([]);
 
+  // --- CAPACITOR INTEGRATION ---
+  
+  // 1. Hide StatusBar on Mount
+  useEffect(() => {
+    const initCapacitor = async () => {
+        try {
+            await StatusBar.hide();
+        } catch (e) {
+            console.log("StatusBar/Capacitor not available or failed to hide");
+        }
+    };
+    initCapacitor();
+  }, []);
+
+  // 2. Haptic Helper
+  const triggerHaptic = useCallback(async (intensity: 'light' | 'medium' | 'heavy' = 'light') => {
+      try {
+          let style = ImpactStyle.Light;
+          if (intensity === 'medium') style = ImpactStyle.Medium;
+          if (intensity === 'heavy') style = ImpactStyle.Heavy;
+          await Haptics.impact({ style });
+      } catch (e) {
+          // Fallback to Web Vibration API
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              const ms = intensity === 'heavy' ? 200 : (intensity === 'medium' ? 100 : 50);
+              navigator.vibrate(ms);
+          }
+      }
+  }, []);
+
   // Detect Mobile on Mount
   useEffect(() => {
     const checkMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -347,11 +378,7 @@ const App: React.FC = () => {
     
     // 3. Play UI Sound AND PRIME VIBRATION
     playUiSound('select');
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-        try {
-            navigator.vibrate(200); // 200ms vibration to unlock Android permission
-        } catch (e) { console.log("Vibrate failed", e); }
-    }
+    triggerHaptic('heavy'); // Using new helper
 
     // 4. Hide Overlay
     setShowMobileStart(false);
@@ -371,7 +398,7 @@ const App: React.FC = () => {
               return newState;
           });
           playUiSound('select');
-          if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate([50, 50, 50]);
+          triggerHaptic('medium'); // Using new helper
           lastPauseTitleClickRef.current = 0; // Reset
       } else {
           lastPauseTitleClickRef.current = now;
@@ -1040,9 +1067,7 @@ const App: React.FC = () => {
     playHitSound(laneIndex);
 
     // HAPTIC FEEDBACK FOR TOUCH (Mobile App Vibrate Fix)
-    if (isMobile && typeof navigator !== 'undefined' && navigator.vibrate) {
-        try { navigator.vibrate(50); } catch(e) {}
-    }
+    triggerHaptic('light'); // Using new helper
 
     // TIME SYNC FIX (UPDATED FOR START OFFSET)
     let elapsed = 0;
@@ -1105,7 +1130,7 @@ const App: React.FC = () => {
             });
         }
     } 
-  }, [status, isAutoPlay, combo, maxCombo, soundProfile, speedMod]);
+  }, [status, isAutoPlay, combo, maxCombo, soundProfile, speedMod, triggerHaptic]);
 
   const releaseLane = useCallback((laneIndex: number) => {
     activeKeysRef.current[laneIndex] = false;
@@ -1237,7 +1262,7 @@ const App: React.FC = () => {
         setHealth(h => Math.max(0, h - 4));
         setFeedback({ text: "MISS", color: "text-red-500", id: Date.now() });
         setIsShaking(true);
-        if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(200);
+        triggerHaptic('heavy'); // Using new helper
         setTimeout(() => setIsShaking(false), 200);
       }
     });
@@ -1253,7 +1278,7 @@ const App: React.FC = () => {
     setHitEffects(prev => prev.filter(e => Date.now() - e.id < 500));
 
     frameRef.current = requestAnimationFrame(update);
-  }, [status, health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile, t, mediaType]);
+  }, [status, health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile, t, mediaType, triggerHaptic]);
 
   useEffect(() => {
     if (status === GameStatus.PLAYING) {
