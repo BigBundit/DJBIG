@@ -1,5 +1,6 @@
 
 
+
 export const TRANSLATIONS = {
     en: {
         // Title & Menu
@@ -21,6 +22,7 @@ export const TRANSLATIONS = {
         CLEAR_PLAYLIST: "CLEAR PLAYLIST",
         LOAD_SINGLE: "LOAD SINGLE FILE",
         LOAD_FOLDER: "LOAD FOLDER",
+        ADD_MULTIPLE: "ADD MULTIPLE FILES",
         PLAY_DEMO: "PLAY DEMO TRACK",
         PLAY_DEMO_01: "PLAY DEMO 01",
         PLAY_DEMO_02: "PLAY DEMO 02",
@@ -122,6 +124,7 @@ export const TRANSLATIONS = {
         CLEAR_PLAYLIST: "ล้างรายการ",
         LOAD_SINGLE: "โหลดไฟล์เดี่ยว",
         LOAD_FOLDER: "โหลดโฟลเดอร์",
+        ADD_MULTIPLE: "เพิ่มทีละหลายๆไฟล์",
         PLAY_DEMO: "เล่นเพลงตัวอย่าง",
         PLAY_DEMO_01: "เพลงตัวอย่าง 01",
         PLAY_DEMO_02: "เพลงตัวอย่าง 02",
