@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StatusBar } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -91,6 +88,10 @@ const App: React.FC = () => {
   const [combo, setCombo] = useState<number>(0);
   const [maxCombo, setMaxCombo] = useState<number>(0);
   const [health, setHealth] = useState<number>(100);
+  
+  // NEW: OVERDRIVE SYSTEM (FEVER MODE)
+  const [overdrive, setOverdrive] = useState<number>(0); // 0-100
+  const [isOverdrive, setIsOverdrive] = useState<boolean>(false);
   
   // Stats for Ranking
   const [perfectCount, setPerfectCount] = useState<number>(0);
@@ -1133,19 +1134,34 @@ const App: React.FC = () => {
             };
             setHitEffects(prev => [...prev, newEffect]);
             
+            // OVERDRIVE MULTIPLIER
+            const multiplier = isOverdrive ? 2 : 1;
+
             if (hitType === ScoreRating.PERFECT) {
-                setScore(s => s + 100 + (combo > 10 ? 10 : 0));
+                setScore(s => s + (100 * multiplier) + (combo > 10 ? 10 : 0));
                 setPerfectCount(c => c + 1);
                 setHealth(h => Math.min(100, h + 0.5));
-                setFeedback({ text: "MAX 100%", color: "text-amber-100", id: Date.now() });
+                setFeedback({ text: isOverdrive ? "MAX 100% x2" : "MAX 100%", color: isOverdrive ? "text-amber-300" : "text-amber-100", id: Date.now() });
+                
+                // OVERDRIVE BUILD UP
+                if (!isOverdrive) {
+                    setOverdrive(o => Math.min(100, o + 2.5));
+                }
+
             } else if (hitType === ScoreRating.GOOD) {
-                setScore(s => s + 50);
+                setScore(s => s + (50 * multiplier));
                 setGoodCount(c => c + 1);
                 setHealth(h => Math.min(100, h + 0.1));
-                setFeedback({ text: "90%", color: "text-green-400", id: Date.now() });
+                setFeedback({ text: isOverdrive ? "90% x2" : "90%", color: "text-green-400", id: Date.now() });
+                
+                if (!isOverdrive) {
+                    setOverdrive(o => Math.min(100, o + 1.0));
+                }
             } else {
-                setScore(s => s + 10);
+                setScore(s => s + (10 * multiplier));
                 setFeedback({ text: "10%", color: "text-yellow-400", id: Date.now() });
+                // Penalty to overdrive
+                if (!isOverdrive) setOverdrive(o => Math.max(0, o - 5));
             }
 
             setCombo(c => {
@@ -1154,8 +1170,11 @@ const App: React.FC = () => {
                 return newC;
             });
         }
-    } 
-  }, [status, isAutoPlay, combo, maxCombo, soundProfile, speedMod, triggerHaptic]);
+    } else {
+        // Misfire penalty to overdrive
+        if (!isOverdrive) setOverdrive(o => Math.max(0, o - 2));
+    }
+  }, [status, isAutoPlay, combo, maxCombo, soundProfile, speedMod, triggerHaptic, isOverdrive]);
 
   const releaseLane = useCallback((laneIndex: number) => {
     activeKeysRef.current[laneIndex] = false;
@@ -1206,6 +1225,27 @@ const App: React.FC = () => {
          const time = Date.now() / 1000;
          const scale = 1 + Math.sin(time * 2) * 0.01;
          bgRef.current.style.transform = `scale(${scale})`;
+    }
+
+    // OVERDRIVE LOGIC
+    // Auto-activate when full
+    if (overdrive >= 100 && !isOverdrive) {
+        setIsOverdrive(true);
+        playUiSound('scratch'); // Sfx for activation
+        triggerHaptic('heavy');
+        setFeedback({ text: t.LIMIT_BREAK, color: "text-amber-400", id: Date.now() });
+    }
+
+    // Drain over time
+    if (isOverdrive) {
+        setOverdrive(prev => {
+            const next = prev - 0.15; // Drains in roughly 10 seconds at 60fps
+            if (next <= 0) {
+                setIsOverdrive(false);
+                return 0;
+            }
+            return next;
+        });
     }
 
     // --- TIME SYNC WITH DELAY START LOGIC ---
@@ -1275,6 +1315,8 @@ const App: React.FC = () => {
                     setMaxCombo(prev => Math.max(prev, newC));
                     return newC;
             });
+            // Autoplay builds overdrive slowly
+             if (!isOverdrive) setOverdrive(o => Math.min(100, o + 0.5));
           }
       }
 
@@ -1289,6 +1331,10 @@ const App: React.FC = () => {
         setIsShaking(true);
         triggerHaptic('heavy'); // Using new helper
         setTimeout(() => setIsShaking(false), 200);
+        
+        // MISS breaks overdrive
+        if (isOverdrive) setIsOverdrive(false);
+        setOverdrive(o => Math.max(0, o - 20));
       }
     });
 
@@ -1303,7 +1349,7 @@ const App: React.FC = () => {
     setHitEffects(prev => prev.filter(e => Date.now() - e.id < 500));
 
     frameRef.current = requestAnimationFrame(update);
-  }, [status, health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile, t, mediaType, triggerHaptic]);
+  }, [status, health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile, t, mediaType, triggerHaptic, isOverdrive, overdrive]);
 
   useEffect(() => {
     if (status === GameStatus.PLAYING) {
@@ -1404,6 +1450,7 @@ const App: React.FC = () => {
     activeKeysRef.current = new Array(keyMode).fill(false);
     setActiveLanesState(new Array(keyMode).fill(false)); // Reset visual state
     setScore(0); setCombo(0); setMaxCombo(0); setHealth(100);
+    setOverdrive(0); setIsOverdrive(false); // Reset Overdrive
     setMissCount(0); setPerfectCount(0); setGoodCount(0);
     setHitEffects([]); setIsAutoPlay(false);
     setFeedback(null); // RESET FEEDBACK
@@ -1466,23 +1513,46 @@ const App: React.FC = () => {
         {renderNotes.map((note) => { const config = activeLaneConfig[note.laneIndex]; if (!config) return null; return ( <Note key={note.id} note={note} totalLanes={keyMode} color={config.color} theme={activeThemeObj} /> ); })}
         <div className="absolute top-[30%] left-0 right-0 flex flex-col items-center pointer-events-none z-50">
             {isAutoPlay && ( <div className={`text-xl ${fontClass} font-bold text-fuchsia-500 animate-pulse mb-2 border border-fuchsia-500 px-2 bg-black/50`}>{t.AUTO_PILOT}</div> )}
+            {isOverdrive && ( <div className={`text-2xl md:text-4xl ${fontClass} font-black italic text-amber-400 animate-pulse mb-2 tracking-widest overdrive-active whitespace-nowrap`} style={{textShadow: '0 0 10px #fbbf24'}}>{t.X2_BONUS}</div> )}
             <div className="flex flex-col items-center">
                 <div className={`text-sm font-bold text-slate-500/50 tracking-[0.3em] mb-[-10px] ${fontClass}`}>{t.COMBO}</div>
                 <div key={combo} className={`text-9xl font-display font-black italic tracking-tighter opacity-20 ${combo > 0 ? 'animate-cyber-slam' : ''}`}>{combo}</div>
             </div>
             {feedback && ( <div key={feedback.id} className={`mt-8 text-5xl font-black font-display italic ${feedback.color} animate-bounce-short drop-shadow-[0_0_10px_rgba(0,0,0,1)] stroke-black`}>{feedback.text}</div> )}
+            
+            {/* NEW HORIZONTAL OVERDRIVE BAR FOR IGNORE THEME (BELOW FEEDBACK) */}
+            {currentThemeId === 'ignore' && (
+                <div className="mt-2 w-40 h-5 bg-black/60 border border-slate-600 rounded-full relative overflow-hidden backdrop-blur-sm">
+                     <div className={`absolute inset-0 transition-all duration-100 ${isOverdrive ? 'bg-amber-400 animate-pulse shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'bg-amber-600/80'}`} style={{ width: `${overdrive}%` }}></div>
+                     <div className="absolute inset-0 flex items-center justify-center z-10">
+                         <span className={`text-[10px] font-black italic tracking-widest ${fontClass} ${isOverdrive ? 'text-black' : 'text-white/70'}`}>OVERDRIVE</span>
+                     </div>
+                </div>
+            )}
         </div>
     </div>
   );
 
   const renderGameFrame = () => {
+    // Determine overdrive visual modifier (Gentle Shake)
+    const frameClass = isOverdrive ? 'border-amber-400 overdrive-border animate-[shake-gentle_0.5s_ease-in-out_infinite]' : '';
+
     if (currentThemeId === 'ignore') {
         return (
-            <div className="relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden border-x-[4px] border-slate-300 bg-slate-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(0,0,0,0.9)] flex flex-col">
+            <div className={`relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden border-x-[4px] border-slate-300 bg-slate-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(0,0,0,0.9)] flex flex-col transition-all duration-300 ${frameClass}`}>
                 <div className="relative flex-1 flex w-full">
-                    <div className="w-4 bg-slate-800/80 border-r border-slate-700 relative"><div className="absolute bottom-20 left-1 w-2 h-32 bg-red-900/50 rounded-full animate-pulse"></div></div>
+                    {/* LEFT SIDE: REMOVED COMPLETELY */}
+                    
                     {renderLanes()}
-                    <div className="w-6 bg-slate-900/80 border-l border-slate-700 relative flex flex-col justify-end p-0.5"><div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`}>{t.GROOVE}</div><div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700"><div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div></div><div className={`mt-1 w-full h-1 ${health > 90 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`}></div></div>
+                    
+                    {/* RIGHT SIDE: HEALTH (Restored) */}
+                    <div className="w-6 bg-slate-900/80 border-l border-slate-700 relative flex flex-col justify-end p-0.5">
+                        <div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`}>{t.GROOVE}</div>
+                        <div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700">
+                            <div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div>
+                        </div>
+                        <div className={`mt-1 w-full h-1 ${health > 90 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`}></div>
+                    </div>
                 </div>
                 <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner pb-[env(safe-area-inset-bottom)]">
                         <div className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left">
@@ -1497,24 +1567,50 @@ const App: React.FC = () => {
         );
     } else if (currentThemeId === 'titan') {
         return (
-             <div className="relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden bg-slate-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(245,158,11,0.1)] flex flex-col border-x-8 border-slate-800/50">
-                <div className="w-full h-16 bg-slate-800/80 border-b-2 border-amber-600/50 flex items-center justify-between px-4 relative pt-[env(safe-area-inset-top)]"><div className="absolute bottom-0 left-0 w-full h-1 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#f59e0b_10px,#f59e0b_20px)] opacity-50"></div><div className="flex flex-col"><div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SYSTEM_INTEGRITY}</div><div className="w-32 h-3 bg-slate-950 border border-slate-600 mt-1"><div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-amber-500'}`} style={{width: `${health}%`}}></div></div></div><div className="text-right"><div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SCORE_OUTPUT}</div><div className="text-2xl font-mono font-bold text-amber-100">{score.toString().padStart(7, '0')}</div></div></div>
+             <div className={`relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden bg-slate-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(245,158,11,0.1)] flex flex-col border-x-8 border-slate-800/50 transition-all ${frameClass}`}>
+                <div className="w-full h-16 bg-slate-800/80 border-b-2 border-amber-600/50 flex items-center justify-between px-4 relative pt-[env(safe-area-inset-top)]">
+                    <div className="absolute bottom-0 left-0 w-full h-1 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,#f59e0b_10px,#f59e0b_20px)] opacity-50"></div>
+                    <div className="flex flex-col">
+                        <div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SYSTEM_INTEGRITY}</div>
+                        <div className="w-32 h-3 bg-slate-950 border border-slate-600 mt-1 flex">
+                            <div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-amber-500'}`} style={{width: `${health}%`}}></div>
+                            {/* OVERDRIVE OVERLAY */}
+                             <div className={`h-full transition-all duration-200 ${isOverdrive ? 'bg-amber-100 animate-pulse' : 'bg-transparent'}`} style={{width: `${overdrive}%`, opacity: 0.5}}></div>
+                        </div>
+                    </div>
+                    <div className="text-right"><div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SCORE_OUTPUT}</div><div className="text-2xl font-mono font-bold text-amber-100">{score.toString().padStart(7, '0')}</div></div>
+                </div>
                 <div className="flex-1 relative bg-slate-900/10 border-l border-r border-slate-800"><div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle, #78716c 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>{renderLanes()}</div>
                 <div className="h-4 bg-slate-800/80 border-t-2 border-amber-600/30 flex justify-center pb-[env(safe-area-inset-bottom)]"><div className="w-1/3 h-full bg-slate-700/80 rounded-b-lg"></div></div>
             </div>
         );
     } else if (currentThemeId === 'queen') {
         return (
-            <div className="relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden bg-gradient-to-b from-black/50 via-purple-950/40 to-pink-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(236,72,153,0.3)] flex flex-col border-x-4 border-pink-800/50">
-                <div className="w-full py-4 px-6 flex justify-between items-center bg-black/40 backdrop-blur-md border-b border-pink-800 pt-[calc(1rem+env(safe-area-inset-top))]"><div className="flex flex-col"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.GRACE}</div><div className="w-32 h-2 bg-purple-950 border border-purple-700 rounded-full mt-1 overflow-hidden"><div className={`h-full transition-all duration-200 bg-gradient-to-r from-purple-600 to-pink-500`} style={{width: `${health}%`}}></div></div></div><div className="flex flex-col items-end"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.POWER}</div><div className="text-3xl font-display font-bold text-pink-100 drop-shadow-[0_0_10px_rgba(236,72,153,0.8)]">{score.toString().padStart(7, '0')}</div></div></div>
+            <div className={`relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden bg-gradient-to-b from-black/50 via-purple-950/40 to-pink-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(236,72,153,0.3)] flex flex-col border-x-4 border-pink-800/50 transition-all ${frameClass}`}>
+                <div className="w-full py-4 px-6 flex justify-between items-center bg-black/40 backdrop-blur-md border-b border-pink-800 pt-[calc(1rem+env(safe-area-inset-top))]"><div className="flex flex-col"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.GRACE}</div><div className="w-32 h-2 bg-purple-950 border border-purple-700 rounded-full mt-1 overflow-hidden relative"><div className={`h-full transition-all duration-200 bg-gradient-to-r from-purple-600 to-pink-500`} style={{width: `${health}%`}}></div><div className={`absolute top-0 left-0 h-full transition-all duration-200 ${isOverdrive ? 'bg-amber-200 mix-blend-overlay animate-pulse' : ''}`} style={{width: `${overdrive}%`}}></div></div></div><div className="flex flex-col items-end"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.POWER}</div><div className="text-3xl font-display font-bold text-pink-100 drop-shadow-[0_0_10px_rgba(236,72,153,0.8)]">{score.toString().padStart(7, '0')}</div></div></div>
                 <div className="flex-1 relative flex"><div className="w-2 h-full bg-gradient-to-b from-purple-900/50 via-pink-900/50 to-purple-900/50"></div><div className="flex-1 relative bg-black/10"><div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(135deg, #be185d 25%, transparent 25%), linear-gradient(225deg, #be185d 25%, transparent 25%), linear-gradient(45deg, #be185d 25%, transparent 25%), linear-gradient(315deg, #be185d 25%, transparent 25%)', backgroundPosition: '10px 0, 10px 0, 0 0, 0 0', backgroundSize: '20px 20px', backgroundRepeat: 'repeat'}}></div>{renderLanes()}</div><div className="w-2 h-full bg-gradient-to-b from-purple-900/50 via-pink-900/50 to-purple-900/50"></div></div>
                  <div className="h-2 w-full bg-gradient-to-r from-purple-900 via-pink-600 to-purple-900 mb-[env(safe-area-inset-bottom)]"></div>
             </div>
         );
     } else {
         return (
-            <div className="relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden border-x-[4px] border-slate-800/50 bg-black/30 backdrop-blur-md shadow-[0_0_60px_rgba(6,182,212,0.2)] flex flex-col">
-                <div className="w-full flex justify-between items-start p-4 bg-gradient-to-b from-slate-900/80 to-transparent z-30 pointer-events-none border-b border-white/10 pt-[calc(1rem+env(safe-area-inset-top))]"><div className="w-1/3"><div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.INTEGRITY}</div><div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-600"><div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-cyan-500'}`} style={{width: `${health}%`}}></div></div></div><div className="w-1/3 text-right"><div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.SCORE}</div><div className="text-4xl font-mono text-white glow-text">{score.toString().padStart(7, '0')}</div></div></div>
+            <div className={`relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden border-x-[4px] border-slate-800/50 bg-black/30 backdrop-blur-md shadow-[0_0_60px_rgba(6,182,212,0.2)] flex flex-col transition-all ${frameClass}`}>
+                <div className="w-full flex justify-between items-start p-4 bg-gradient-to-b from-slate-900/80 to-transparent z-30 pointer-events-none border-b border-white/10 pt-[calc(1rem+env(safe-area-inset-top))]">
+                    <div className="w-1/3">
+                        <div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.INTEGRITY}</div>
+                        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-600 mb-1">
+                            <div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-cyan-500'}`} style={{width: `${health}%`}}></div>
+                        </div>
+                         {/* OVERDRIVE BAR SIMPLE */}
+                         <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                            <div className={`h-full transition-all duration-200 ${isOverdrive ? 'bg-amber-300 animate-pulse' : 'bg-amber-600'}`} style={{width: `${overdrive}%`}}></div>
+                        </div>
+                    </div>
+                    <div className="w-1/3 text-right">
+                        <div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.SCORE}</div>
+                        <div className="text-4xl font-mono text-white glow-text">{score.toString().padStart(7, '0')}</div>
+                    </div>
+                </div>
                 <div className="flex-1 relative bg-black/10 backdrop-blur-sm">{renderLanes()}</div>
                 <div className="h-2 bg-gradient-to-r from-cyan-500 to-blue-500 w-full shadow-[0_0_20px_rgba(6,182,212,0.5)] mb-[env(safe-area-inset-bottom)]"></div>
             </div>
@@ -1541,7 +1637,25 @@ const App: React.FC = () => {
 
       <audio ref={bgMusicRef} src="/musicbg.mp3" loop />
 
-      <div className="absolute inset-0 z-0 pointer-events-auto overflow-hidden bg-slate-900" ref={bgRef} style={{ transition: 'transform 0.05s, filter 0.05s' }}>
+      <div className={`absolute inset-0 z-0 pointer-events-auto overflow-hidden bg-slate-900 ${isOverdrive ? 'animate-pulse' : ''}`} ref={bgRef} style={{ transition: 'transform 0.05s, filter 0.05s' }}>
+        {/* OVERDRIVE BACKGROUND EFFECTS: THUNDER & STROBE */}
+        {isOverdrive && status === GameStatus.PLAYING && (
+            <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+                {/* 1. White Strobe Flashes */}
+                <div className="absolute inset-0 bg-white/10 mix-blend-overlay animate-lightning"></div>
+                
+                {/* 2. Lightning Bolts (SVG) */}
+                <svg className="absolute inset-0 w-full h-full opacity-60" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    {/* Bolt 1 (Left) */}
+                    <path d="M 20 0 L 30 30 L 10 50 L 25 100" stroke="#fbbf24" strokeWidth="0.5" fill="none" className="lightning-bolt" style={{animationDelay: '0.2s'}} />
+                    {/* Bolt 2 (Right) */}
+                    <path d="M 80 0 L 60 40 L 90 60 L 70 100" stroke="#fbbf24" strokeWidth="0.5" fill="none" className="lightning-bolt" style={{animationDelay: '1.5s'}} />
+                     {/* Bolt 3 (Center) */}
+                    <path d="M 50 0 L 40 20 L 60 40 L 30 70 L 50 100" stroke="#ffffff" strokeWidth="0.8" fill="none" className="lightning-bolt" style={{animationDelay: '0.8s'}} />
+                </svg>
+            </div>
+        )}
+
         {(status === GameStatus.TITLE || status === GameStatus.MENU) && (
             <div className="absolute inset-0 z-10 pointer-events-none">
                 {layoutSettings.enableMenuBackground ? (
@@ -1557,7 +1671,7 @@ const App: React.FC = () => {
         {(status === GameStatus.PLAYING || status === GameStatus.PAUSED || status === GameStatus.OUTRO) && (
             <>
                 {mediaType === 'video' ? (
-                    <video ref={mediaRef as React.RefObject<HTMLVideoElement>} src={localVideoSrc} className="absolute inset-0 w-full h-full object-cover z-20 pointer-events-none touch-none" onEnded={triggerOutro} playsInline 
+                    <video ref={mediaRef as React.RefObject<HTMLVideoElement>} src={localVideoSrc} className={`absolute inset-0 w-full h-full object-cover z-20 pointer-events-none touch-none ${isOverdrive ? 'overdrive-active brightness-125 saturate-150' : ''}`} onEnded={triggerOutro} playsInline 
                         // @ts-ignore
                         webkit-playsinline="true" disablePictureInPicture />
                 ) : (

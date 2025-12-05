@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { LaneConfig, Theme } from '../types';
 
@@ -37,7 +36,7 @@ export const Lane: React.FC<LaneProps> = ({ config, active, onTrigger, onRelease
             return (
                 <div className={styleClasses}>
                     <div className={`w-full h-full absolute inset-0 rounded-lg opacity-30 ${active ? `bg-${config.color.base}-500` : ''}`}></div>
-                    <span className={`relative z-10 font-bold font-mono text-2xl ${active ? 'text-white' : 'text-slate-400'}`}>
+                    <span className={`relative z-10 font-bold font-mono text-2xl ${active ? 'text-slate-400' : 'text-slate-700'}`}>
                         {config.label === 'SPC' ? '␣' : config.label}
                     </span>
                     <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/5 rounded-t-lg"></div>

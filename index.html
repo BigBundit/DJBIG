@@ -131,6 +131,23 @@
         100% { transform: translate(var(--tw-translate-x), var(--tw-translate-y)) scale(0); opacity: 0; }
       }
 
+      /* Overdrive Chromatic Aberration */
+      @keyframes chromatic-pulse {
+        0% { text-shadow: 2px 0 #f00, -2px 0 #0ff; transform: translate(0,0); }
+        25% { text-shadow: -2px 0 #f00, 2px 0 #0ff; transform: translate(1px, 1px); }
+        50% { text-shadow: 2px 0 #f00, -2px 0 #0ff; transform: translate(-1px, -1px); }
+        75% { text-shadow: -2px 0 #f00, 2px 0 #0ff; transform: translate(1px, -1px); }
+        100% { text-shadow: 2px 0 #f00, -2px 0 #0ff; transform: translate(0,0); }
+      }
+
+      .overdrive-active {
+        animation: chromatic-pulse 0.1s infinite;
+      }
+
+      .overdrive-border {
+        box-shadow: 0 0 30px rgba(245, 158, 11, 0.6), inset 0 0 20px rgba(245, 158, 11, 0.3);
+      }
+
       /* Vintage TV Effects */
       @keyframes noise {
         0%, 100% { transform: translate(0, 0); }
@@ -174,6 +191,7 @@
         100% { transform: translateY(100vh); }
       }
 
+      /* STANDARD SHAKE (Heavy) */
       @keyframes shake {
         0% { transform: translate(0, 0); }
         20% { transform: translate(-5px, 5px); }
@@ -181,6 +199,42 @@
         60% { transform: translate(-5px, -5px); }
         80% { transform: translate(5px, 5px); }
         100% { transform: translate(0, 0); }
+      }
+
+      /* GENTLE SHAKE (For Overdrive) */
+      @keyframes shake-gentle {
+        0%, 100% { transform: translate(0, 0); }
+        25% { transform: translate(-1px, 1px); }
+        50% { transform: translate(1px, -1px); }
+        75% { transform: translate(-1px, 1px); }
+      }
+
+      /* LIGHTNING EFFECTS */
+      @keyframes lightning-flash {
+        0% { opacity: 0; }
+        2% { opacity: 1; }
+        4% { opacity: 0; }
+        6% { opacity: 1; }
+        8% { opacity: 0; }
+        10% { opacity: 0.8; }
+        100% { opacity: 0; }
+      }
+      
+      @keyframes bolt-strike {
+        0% { stroke-dashoffset: 1000; opacity: 1; }
+        50% { stroke-dashoffset: 0; opacity: 1; }
+        100% { stroke-dashoffset: 0; opacity: 0; }
+      }
+
+      .animate-lightning {
+        animation: lightning-flash 3s infinite;
+      }
+      
+      .lightning-bolt {
+        stroke-dasharray: 1000;
+        stroke-dashoffset: 1000;
+        animation: bolt-strike 0.5s linear forwards;
+        filter: drop-shadow(0 0 10px #fcd34d) drop-shadow(0 0 20px #f59e0b);
       }
 
       /* CORE ROTATION ANIMATIONS */
@@ -199,7 +253,7 @@
       @keyframes float-particle {
         0% { transform: translate(0,0); opacity: 0; }
         10% { opacity: 1; }
-        100% { transform: translate(var(--tx), var(--ty)); opacity: 0; }
+        100% { transform: translate(var(--tw-translate-x), var(--tw-translate-y)); opacity: 0; }
       }
 
       /* CYBER COMBO SLAM */
@@ -275,7 +329,11 @@
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "@capacitor/status-bar": "https://aistudiocdn.com/@capacitor/status-bar@^7.0.3",
-    "@capacitor/haptics": "https://aistudiocdn.com/@capacitor/haptics@^7.0.2"
+    "@capacitor/haptics": "https://aistudiocdn.com/@capacitor/haptics@^7.0.2",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "vite": "https://aistudiocdn.com/vite@^7.2.6",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "url": "https://aistudiocdn.com/url@^0.11.4"
   }
 }
 </script>
