@@ -2,6 +2,7 @@
 
 
 
+
 export const TRANSLATIONS = {
     en: {
         // Title & Menu
@@ -55,7 +56,7 @@ export const TRANSLATIONS = {
         AUTO_PILOT: "AUTO PILOT",
         SYSTEM_LINKED: "SYSTEM LINKED",
         OVERDRIVE: "OVERDRIVE",
-        LIMIT_BREAK: "LIMIT BREAK ACTIVE",
+        LIMIT_BREAK: "OVERDRIVE!!",
         X2_BONUS: "CORE X2",
 
         // Settings
@@ -160,7 +161,7 @@ export const TRANSLATIONS = {
         AUTO_PILOT: "ระบบอัตโนมัติ",
         SYSTEM_LINKED: "เชื่อมต่อระบบ",
         OVERDRIVE: "โอเวอร์ไดรฟ์",
-        LIMIT_BREAK: "ปลดขีดจำกัด",
+        LIMIT_BREAK: "OVERDRIVE!!",
         X2_BONUS: "คะแนน X2",
 
         // Settings

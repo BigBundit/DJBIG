@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StatusBar } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -934,6 +935,9 @@ const App: React.FC = () => {
 
   // Re-analyze when level/key changes
   useEffect(() => {
+    // Clear notes immediately to prevent playing with wrong chart
+    setAnalyzedNotes(null);
+    
     if (audioBufferRef.current && !isAnalyzing) {
        const timeoutId = setTimeout(() => {
            if (audioBufferRef.current) {
@@ -1500,7 +1504,7 @@ const App: React.FC = () => {
              <div ref={progressBarRef} className="h-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.8)]" style={{ width: '0%' }}></div>
         </div>
         {activeLaneConfig.map((lane, index) => (
-            <Lane key={index} config={lane} active={activeLanesState[index]} onTrigger={() => triggerLane(index)} onRelease={() => releaseLane(index)} theme={activeThemeObj} />
+            <Lane key={index} config={lane} active={activeLanesState[index]} onTrigger={() => triggerLane(index)} onRelease={() => releaseLane(index)} theme={activeThemeObj} isOverdrive={isOverdrive} />
         ))}
         <div className="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-black via-black/80 to-transparent pointer-events-none z-10"></div>
         {currentThemeId !== 'ignore' && (
@@ -1522,10 +1526,18 @@ const App: React.FC = () => {
             
             {/* NEW HORIZONTAL OVERDRIVE BAR FOR IGNORE THEME (BELOW FEEDBACK) */}
             {currentThemeId === 'ignore' && (
-                <div className="mt-2 w-40 h-5 bg-black/60 border border-slate-600 rounded-full relative overflow-hidden backdrop-blur-sm">
-                     <div className={`absolute inset-0 transition-all duration-100 ${isOverdrive ? 'bg-amber-400 animate-pulse shadow-[0_0_15px_rgba(251,191,36,0.8)]' : 'bg-amber-600/80'}`} style={{ width: `${overdrive}%` }}></div>
-                     <div className="absolute inset-0 flex items-center justify-center z-10">
-                         <span className={`text-[10px] font-black italic tracking-widest ${fontClass} ${isOverdrive ? 'text-black' : 'text-white/70'}`}>OVERDRIVE</span>
+                <div className="mt-2 w-48 h-6 bg-slate-900/80 border border-slate-500 rounded-full relative overflow-hidden backdrop-blur-sm">
+                     {/* Bar Fill */}
+                     <div 
+                        className={`absolute inset-0 transition-all duration-100 ${isOverdrive ? 'animate-rainbow' : 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]'}`} 
+                        style={{ width: `${overdrive}%` }}
+                     ></div>
+                     
+                     {/* Text Layer - Using Mix Blend Difference for auto-contrast */}
+                     <div className="absolute inset-0 flex items-center justify-center z-10 mix-blend-difference">
+                         <span className={`text-[10px] md:text-xs font-black italic tracking-[0.2em] ${fontClass} text-white`}>
+                             OVERDRIVE
+                         </span>
                      </div>
                 </div>
             )}
@@ -1549,7 +1561,8 @@ const App: React.FC = () => {
                     <div className="w-6 bg-slate-900/80 border-l border-slate-700 relative flex flex-col justify-end p-0.5">
                         <div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`}>{t.GROOVE}</div>
                         <div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700">
-                            <div className="absolute bottom-0 left-0 w-full transition-all duration-200 bg-gradient-to-t from-red-500 via-yellow-400 to-green-500" style={{ height: `${health}%` }}></div>
+                            {/* RAINBOW HEALTH BAR ON OVERDRIVE */}
+                            <div className={`absolute bottom-0 left-0 w-full transition-all duration-200 ${isOverdrive ? 'animate-rainbow' : 'bg-gradient-to-t from-red-500 via-yellow-400 to-green-500'}`} style={{ height: `${health}%` }}></div>
                         </div>
                         <div className={`mt-1 w-full h-1 ${health > 90 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`}></div>
                     </div>
@@ -1638,9 +1651,10 @@ const App: React.FC = () => {
       <audio ref={bgMusicRef} src="/musicbg.mp3" loop />
 
       <div className={`absolute inset-0 z-0 pointer-events-auto overflow-hidden bg-slate-900 ${isOverdrive ? 'animate-pulse' : ''}`} ref={bgRef} style={{ transition: 'transform 0.05s, filter 0.05s' }}>
-        {/* OVERDRIVE BACKGROUND EFFECTS: THUNDER & STROBE */}
-        {isOverdrive && status === GameStatus.PLAYING && (
-            <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+        
+        {/* OPTIMIZED OVERDRIVE EFFECTS: Always present but hidden via opacity to prevent layout thrashing */}
+        {status === GameStatus.PLAYING && (
+            <div className={`absolute inset-0 z-10 pointer-events-none overflow-hidden transition-opacity duration-200 ${isOverdrive ? 'opacity-100' : 'opacity-0'}`}>
                 {/* 1. White Strobe Flashes */}
                 <div className="absolute inset-0 bg-white/10 mix-blend-overlay animate-lightning"></div>
                 

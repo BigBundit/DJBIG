@@ -22,7 +22,9 @@ export const Note: React.FC<NoteProps> = ({ note, totalLanes, color, theme }) =>
         left: leftPos, 
         top: `${note.y}%`,
         width: `${widthPerc}%`,
-        height: '3%' // Default height
+        height: '3%', // Default height
+        transform: 'translateZ(0)', // Force GPU acceleration
+        willChange: 'top' // Optimize for movement
     };
 
     const colorClass = `${color.bg} ${color.noteShadow}`;
@@ -66,7 +68,7 @@ export const Note: React.FC<NoteProps> = ({ note, totalLanes, color, theme }) =>
 
     return (
         <div 
-            className="absolute z-20 will-change-transform px-[2px] flex justify-center items-center"
+            className="absolute z-20 px-[2px] flex justify-center items-center"
             style={containerStyle}
         >
             <div className={`w-full h-full relative transition-all ${shapeClass}`}>
