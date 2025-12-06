@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Note as NoteType, LaneColor, Theme } from '../types';
+import { Note as NoteType, LaneColor, Theme, GameModifiers } from '../types';
 
 interface NoteProps {
     note: NoteType;
@@ -8,9 +8,10 @@ interface NoteProps {
     color: LaneColor;
     theme: Theme;
     isOverdrive?: boolean;
+    modifiers?: GameModifiers;
 }
 
-export const Note: React.FC<NoteProps> = ({ note, totalLanes, color, theme, isOverdrive }) => {
+export const Note: React.FC<NoteProps> = ({ note, totalLanes, color, theme, isOverdrive, modifiers }) => {
     const widthPerc = 100 / totalLanes;
     const leftPos = `${note.laneIndex * widthPerc}%`;
     
@@ -19,13 +20,39 @@ export const Note: React.FC<NoteProps> = ({ note, totalLanes, color, theme, isOv
     
     let shapeClass = '';
     let innerContent = null;
+    let opacity = 1;
+
+    // --- MODIFIER LOGIC (VISUALS) ---
+    // Updated: Sudden now appears much earlier (at 25% instead of 50%)
+    if (modifiers) {
+        if (modifiers.hidden) {
+            // HIDDEN: Visible Top (0-50%), Invisible Bottom (50-100%)
+            if (note.y > 50) {
+                opacity = 0;
+            } else {
+                opacity = Math.max(0, 1 - ((note.y - 40) / 10)); 
+            }
+        } else if (modifiers.sudden) {
+            // SUDDEN: Invisible Top (0-25%), Visible Bottom (25-100%)
+            // This gives "another half screen" of visibility compared to 50%
+            const threshold = 25;
+            if (note.y < threshold) {
+                opacity = 0;
+            } else {
+                 // Fade in quickly
+                opacity = Math.min(1, (note.y - threshold) / 10);
+            }
+        }
+    }
+
     let containerStyle: React.CSSProperties = {
         left: leftPos, 
         top: `${note.y}%`,
         width: `${widthPerc}%`,
         height: '3%', // Default height
         transform: 'translateZ(0)', // Force GPU acceleration
-        willChange: 'top' // Optimize for movement
+        willChange: 'top, opacity', // Optimize for movement
+        opacity: opacity
     };
 
     const colorClass = `${color.bg} ${color.noteShadow}`;

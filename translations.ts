@@ -1,8 +1,5 @@
 
 
-
-
-
 export const TRANSLATIONS = {
     en: {
         // Title & Menu
@@ -42,6 +39,12 @@ export const TRANSLATIONS = {
         NORMAL: "NORMAL",
         HARD: "HARD",
         EXPERT: "EXPERT",
+
+        // Modifiers
+        MODIFIERS: "MODIFIERS",
+        MOD_MIRROR: "MIRROR",
+        MOD_SUDDEN: "SUDDEN",
+        MOD_HIDDEN: "HIDDEN",
 
         // In-Game
         COMBO: "COMBO",
@@ -147,6 +150,12 @@ export const TRANSLATIONS = {
         NORMAL: "ปกติ",
         HARD: "ยาก",
         EXPERT: "เชี่ยวชาญ",
+
+        // Modifiers
+        MODIFIERS: "ตัวช่วยเล่น",
+        MOD_MIRROR: "กระจก",
+        MOD_SUDDEN: "ซ่อนบน",
+        MOD_HIDDEN: "ซ่อนล่าง",
 
         // In-Game
         COMBO: "คอมโบ",

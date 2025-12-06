@@ -4,6 +4,7 @@ export enum GameStatus {
     MENU,
     PLAYING,
     PAUSED,
+    RESUMING, // New Status for Countdown
     OUTRO,
     FINISHED
 }
@@ -90,6 +91,12 @@ export interface LayoutSettings {
     enableMenuBackground?: boolean;
     language: 'en' | 'th';
     enableVibration?: boolean;
+}
+
+export interface GameModifiers {
+    mirror: boolean;
+    sudden: boolean;
+    hidden: boolean;
 }
 
 // --- THEME SYSTEM TYPES ---

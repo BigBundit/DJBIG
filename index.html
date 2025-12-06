@@ -335,6 +335,53 @@
         animation: spin-cw 4s linear infinite;
       }
       
+      /* RANK STYLES */
+      .rank-sss {
+        background: linear-gradient(to bottom, #22d3ee, #e879f9, #facc15);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+        filter: drop-shadow(0 0 5px rgba(232, 121, 249, 1));
+        animation: pulse-fast 0.5s infinite;
+      }
+      .rank-ss {
+        background: linear-gradient(to bottom, #fef08a, #eab308);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-shadow: 0 0 15px rgba(234, 179, 8, 0.8);
+        filter: drop-shadow(0 0 5px rgba(234, 179, 8, 0.5));
+      }
+      .rank-s {
+        color: #f97316;
+        text-shadow: 0 0 15px rgba(249, 115, 22, 0.8);
+      }
+      .rank-a {
+        color: #22c55e;
+        text-shadow: 0 0 15px rgba(34, 197, 94, 0.8);
+      }
+      .rank-b {
+        color: #3b82f6;
+        text-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
+      }
+      .rank-c {
+        color: #a855f7;
+      }
+      .rank-d {
+        color: #64748b;
+      }
+
+      /* COMBO TIERS */
+      .combo-tier-0 { color: #94a3b8; opacity: 0.5; }
+      .combo-tier-1 { color: #22d3ee; text-shadow: 0 0 5px #22d3ee; }
+      .combo-tier-2 { color: #facc15; text-shadow: 0 0 10px #facc15; }
+      .combo-tier-3 { 
+        background: linear-gradient(to bottom, #facc15, #f472b6, #22d3ee);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 0 5px white);
+        animation: shake-gentle 0.2s infinite;
+      }
+
       .no-scrollbar::-webkit-scrollbar {
         display: none;
       }

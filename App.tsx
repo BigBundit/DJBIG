@@ -14,7 +14,8 @@ import {
   ThemeId,
   PlayerStats,
   Theme,
-  LayoutSettings
+  LayoutSettings,
+  GameModifiers
 } from './types';
 import { 
   LANE_CONFIGS_4,
@@ -98,12 +99,16 @@ const App: React.FC = () => {
   const [perfectCount, setPerfectCount] = useState<number>(0);
   const [goodCount, setGoodCount] = useState<number>(0);
   const [missCount, setMissCount] = useState<number>(0);
+  
+  // REAL-TIME RANKING STATE
+  const [currentRank, setCurrentRank] = useState<string>('SSS');
 
   const [feedback, setFeedback] = useState<{ text: string; color: string; id: number } | null>(null);
   const [isAutoPlay, setIsAutoPlay] = useState<boolean>(false);
   
   // Countdown State
   const [startCountdown, setStartCountdown] = useState<number | null>(null);
+  const [resumeCountdown, setResumeCountdown] = useState<number | null>(null); // NEW: Resume Countdown
   const [isShaking, setIsShaking] = useState<boolean>(false);
 
   // Visual Effects State
@@ -146,6 +151,12 @@ const App: React.FC = () => {
           if ([4, 5, 7].includes(parsed)) return parsed as 4 | 5 | 7;
       }
       return 4;
+  });
+
+  // GAME MODIFIERS STATE
+  const [modifiers, setModifiers] = useState<GameModifiers>(() => {
+      const saved = localStorage.getItem('djbig_modifiers');
+      return saved ? JSON.parse(saved) : { mirror: false, sudden: false, hidden: false };
   });
 
   const [keyMappings, setKeyMappings] = useState<KeyMapping>(DEFAULT_KEY_MAPPINGS);
@@ -318,37 +329,80 @@ const App: React.FC = () => {
     setIsPlayingPreview(false);
   }, []);
 
-  // Toggle Pause (Defined early)
+  // Toggle Pause (UPDATED with Rewind & Countdown)
   const togglePause = useCallback(() => {
     if (statusRef.current === GameStatus.PLAYING) {
+        // PAUSE ACTION
         setStatus(GameStatus.PAUSED);
         pauseTimeRef.current = performance.now();
         if (mediaRef.current) mediaRef.current.pause();
         if (audioCtxRef.current) audioCtxRef.current.suspend();
-        if (bgVideoRef.current) bgVideoRef.current.pause(); // Sync BG
+        if (bgVideoRef.current) bgVideoRef.current.pause();
     } else if (statusRef.current === GameStatus.PAUSED) {
-        setStatus(GameStatus.PLAYING);
-        const pauseDuration = performance.now() - pauseTimeRef.current;
-        totalPauseDurationRef.current += pauseDuration;
-        
-        // Only resume media if we are past the start offset
-        const currentRefTime = performance.now() - startTimeRef.current - totalPauseDurationRef.current;
-        if (currentRefTime >= START_OFFSET_MS) {
-            if (mediaRef.current) mediaRef.current.play().catch(() => {});
+        // RESUME ACTION -> ENTER RESUMING STATE
+        setStatus(GameStatus.RESUMING);
+        setResumeCountdown(2);
+
+        // REWIND LOGIC
+        if (mediaRef.current) {
+             // Rewind 2 seconds
+             const newTime = Math.max(0, mediaRef.current.currentTime - 2);
+             mediaRef.current.currentTime = newTime;
         }
-        
-        if (bgVideoRef.current) bgVideoRef.current.play().catch(() => {}); // Sync BG
-        if (audioCtxRef.current) audioCtxRef.current.resume();
+
+        // Adjust timings will happen after countdown finishes
     }
-  }, []); // Empty dep array because we rely on statusRef
+  }, []); // Empty dep array
+
+  // Resume Sequence Effect
+  useEffect(() => {
+    if (status === GameStatus.RESUMING && resumeCountdown !== null) {
+        if (resumeCountdown > 0) {
+            const timer = setTimeout(() => {
+                setResumeCountdown(resumeCountdown - 1);
+            }, 1000);
+            return () => clearTimeout(timer);
+        } else {
+            // COUNTDOWN FINISHED -> GO TO PLAYING
+            setResumeCountdown(null);
+            
+            // Re-calc timing offset
+            // We just spent 2 seconds counting down (plus rewound media).
+            // Current wall clock is 'now'.
+            // Media is at 'media.currentTime' (which we rewound).
+            // We need startTimeRef to match: now - (media.currentTime * 1000 + OFFSET)
+            
+            const now = performance.now();
+            let mediaTimeMs = 0;
+            if (mediaRef.current) {
+                mediaTimeMs = mediaRef.current.currentTime * 1000;
+            }
+            
+            // Reset pause tracking because we just hard-synced start time
+            totalPauseDurationRef.current = 0;
+            pauseTimeRef.current = 0;
+            startTimeRef.current = now - mediaTimeMs - START_OFFSET_MS;
+            
+            setStatus(GameStatus.PLAYING);
+            if (mediaRef.current) mediaRef.current.play().catch(() => {});
+            if (bgVideoRef.current) bgVideoRef.current.play().catch(() => {});
+            if (audioCtxRef.current) audioCtxRef.current.resume();
+        }
+    }
+  }, [status, resumeCountdown]);
 
   // Listen for Visibility Change to Pause/Mute
   useEffect(() => {
       const handleVisibilityChange = () => {
           if (document.hidden) {
               // App is minimized or switched away
-              if (statusRef.current === GameStatus.PLAYING) {
-                  togglePause(); 
+              if (statusRef.current === GameStatus.PLAYING || statusRef.current === GameStatus.RESUMING) {
+                   // Force pause without resume logic
+                   setStatus(GameStatus.PAUSED);
+                   pauseTimeRef.current = performance.now();
+                   if (mediaRef.current) mediaRef.current.pause();
+                   if (audioCtxRef.current) audioCtxRef.current.suspend();
+                   if (bgVideoRef.current) bgVideoRef.current.pause();
               }
               
               // FORCE STOP PREVIEW
@@ -588,6 +642,9 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('djbig_level', level.toString()); }, [level]);
   useEffect(() => { localStorage.setItem('djbig_speed', speedMod.toString()); }, [speedMod]);
   useEffect(() => { localStorage.setItem('djbig_keymode', keyMode.toString()); }, [keyMode]);
+  
+  // Persist Modifiers
+  useEffect(() => { localStorage.setItem('djbig_modifiers', JSON.stringify(modifiers)); }, [modifiers]);
 
   const saveKeyMappings = (newMappings: KeyMapping) => {
       setKeyMappings(newMappings);
@@ -1124,6 +1181,33 @@ const App: React.FC = () => {
       setTimeout(() => setStatus(GameStatus.FINISHED), 3000);
   }, [score, maxCombo, perfectCount, isAutoPlay, playerStats]);
 
+  // UPDATE RANK HELPER
+  const updateRank = useCallback(() => {
+    // Weighted Calculation: Perfect=100%, Good=50%, Miss=0%
+    const totalHits = perfectCount + goodCount + missCount;
+    if (totalHits === 0) {
+        setCurrentRank('SSS');
+        return;
+    }
+    
+    const weightedScore = (perfectCount * 100) + (goodCount * 50);
+    const maxPotential = totalHits * 100;
+    const accuracy = (weightedScore / maxPotential) * 100;
+
+    if (accuracy >= 99) setCurrentRank('SSS');
+    else if (accuracy >= 98) setCurrentRank('SS');
+    else if (accuracy >= 95) setCurrentRank('S');
+    else if (accuracy >= 90) setCurrentRank('A');
+    else if (accuracy >= 80) setCurrentRank('B');
+    else if (accuracy >= 70) setCurrentRank('C');
+    else setCurrentRank('D');
+
+  }, [perfectCount, goodCount, missCount]);
+
+  useEffect(() => {
+      updateRank();
+  }, [perfectCount, goodCount, missCount, updateRank]);
+
   // CORE GAME LOGIC
   const triggerLane = useCallback((laneIndex: number) => {
     if (status !== GameStatus.PLAYING || isAutoPlay) return; 
@@ -1211,6 +1295,8 @@ const App: React.FC = () => {
                 setFeedback({ text: "10%", color: "text-yellow-400", id: Date.now() });
                 // Penalty to overdrive
                 if (!isOverdrive) setOverdrive(o => Math.max(0, o - 5));
+                
+                // Bad doesn't count for accuracy weight in our simplified logic, effectively 0 like miss but gives score
             }
 
             setCombo(c => {
@@ -1334,8 +1420,6 @@ const App: React.FC = () => {
         } else {
              // Audio Mode (Buffer fallback) or just using clock
              elapsed = timeSinceStart;
-             // We handle buffer playback start in the 'startGame' or specific buffer logic separately
-             // For consistency in this snippet, we assume mediaRef handles primary time
         }
     }
     
@@ -1499,7 +1583,17 @@ const App: React.FC = () => {
   }
 
   const startGame = (useBufferPlayback: boolean, notesOverride?: NoteType[]) => {
-    const notesToUse = notesOverride || analyzedNotes;
+    let notesToUse = notesOverride || analyzedNotes;
+    
+    // APPLY MIRROR MODIFIER
+    if (notesToUse && modifiers.mirror) {
+        // Deep copy to avoid mutating original analysis
+        notesToUse = notesToUse.map(n => ({
+            ...n,
+            laneIndex: (keyMode - 1) - Number(n.laneIndex)
+        }));
+    }
+
     if (notesToUse) {
         notesRef.current = notesToUse.map(n => ({
             id: Number(n.id),
@@ -1522,15 +1616,11 @@ const App: React.FC = () => {
     setFeedback(null); // RESET FEEDBACK
     setIsShaking(false); // RESET SHAKE
     totalPauseDurationRef.current = 0;
+    setCurrentRank('SSS'); // RESET RANK
     
     setStatus(GameStatus.PLAYING);
     startTimeRef.current = performance.now(); // Mark start time
 
-    // For buffer playback (generated audio), we need to delay it manually too
-    if (useBufferPlayback && audioBufferRef.current && audioCtxRef.current) {
-        // We will start this in the update loop when time > 3000
-    }
-    
     // Pause media immediately to ensure delay works
     if (mediaRef.current) {
         mediaRef.current.pause();
@@ -1548,6 +1638,31 @@ const App: React.FC = () => {
              <div><div className={`text-xs font-bold text-slate-500 mb-2 tracking-widest ${fontClass}`}>{t.LEVEL}</div><div className="flex gap-2 h-10">{DIFFICULTY_OPTIONS.map((diff) => { const active = level === diff.value; return ( <button key={diff.value} onClick={() => { setLevel(diff.value); playUiSound('select'); }} className={`flex-1 flex flex-col justify-end p-1 rounded transition-all relative overflow-hidden group border ${active ? 'border-white/50' : 'border-transparent'}`}><div className={`absolute inset-0 opacity-20 ${diff.color}`}></div><div className={`w-full transition-all duration-300 ${active ? 'h-full opacity-100' : 'h-1/3 opacity-40 group-hover:h-1/2'} ${diff.color}`}></div><span className={`relative z-10 text-[10px] md:text-xs font-bold text-center mt-1 truncate ${active ? 'text-white' : 'text-slate-500'} ${fontClass}`}>{diff.label}</span></button> ) })}</div></div>
              <div><div className={`text-xs font-bold text-slate-500 mb-2 tracking-widest ${fontClass}`}>{t.KEY_MODE_LABEL || "KEY CONFIGURATION"}</div><div className="flex gap-2 h-10">{[4, 5, 7].map((k) => { const active = keyMode === k; return ( <button key={k} onClick={()=>{setKeyMode(k as any);playUiSound('select')}} className={`flex-1 relative overflow-hidden rounded border transition-all duration-200 flex items-center justify-center ${active ? 'bg-cyan-900/50 border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'bg-slate-800 border-slate-700 hover:border-cyan-600'}`}><div className={`text-xl font-black italic ${active ? 'text-white' : 'text-slate-500 group-hover:text-cyan-200'}`}>{k}Key</div><div className={`text-[10px] ml-1 font-bold ${active ? 'text-cyan-400' : 'text-slate-600'}`}>MODE</div></button> ); })}</div></div>
              <div><div className={`text-xs font-bold text-slate-500 mb-1 ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="flex items-center bg-black rounded border border-slate-700 p-1"><button onClick={()=>{setSpeedMod(Math.max(1,speedMod-0.5));playUiSound('select')}} className="w-10 h-8 bg-slate-800 text-slate-400 hover:text-white font-bold rounded">-</button><div className="flex-1 text-center font-mono text-cyan-400 font-bold text-lg">{speedMod.toFixed(1)}</div><button onClick={()=>{setSpeedMod(Math.min(10,speedMod+0.5));playUiSound('select')}} className="w-10 h-8 bg-slate-800 text-slate-400 hover:text-white font-bold rounded">+</button></div></div>
+             
+             {/* MODIFIERS SECTION */}
+             <div>
+                <div className={`text-xs font-bold text-slate-500 mb-1 tracking-widest ${fontClass}`}>{t.MODIFIERS}</div>
+                <div className="flex gap-2 h-8">
+                    <button 
+                        onClick={() => { setModifiers(m => ({...m, mirror: !m.mirror})); playUiSound('select'); }} 
+                        className={`flex-1 rounded border text-[10px] font-bold transition-all ${modifiers.mirror ? 'bg-cyan-600 border-cyan-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400'} ${fontClass}`}
+                    >
+                        {t.MOD_MIRROR}
+                    </button>
+                    <button 
+                        onClick={() => { setModifiers(m => ({...m, sudden: !m.sudden, hidden: false})); playUiSound('select'); }} 
+                        className={`flex-1 rounded border text-[10px] font-bold transition-all ${modifiers.sudden ? 'bg-fuchsia-600 border-fuchsia-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400'} ${fontClass}`}
+                    >
+                        {t.MOD_SUDDEN}
+                    </button>
+                    <button 
+                        onClick={() => { setModifiers(m => ({...m, hidden: !m.hidden, sudden: false})); playUiSound('select'); }} 
+                        className={`flex-1 rounded border text-[10px] font-bold transition-all ${modifiers.hidden ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400'} ${fontClass}`}
+                    >
+                        {t.MOD_HIDDEN}
+                    </button>
+                </div>
+             </div>
          </div>
          <button ref={mobileSetupStartBtnRef} onClick={startCountdownSequence} disabled={isAnalyzing || !analyzedNotes} onMouseEnter={() => playUiSound('hover')} className={`group relative w-full h-14 flex flex-col items-center justify-center transform transition-all duration-200 active:scale-95 ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer'}`}><div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 transform -skew-x-2 border-2 border-white/20 shadow-[0_0_30px_rgba(6,182,212,0.5)] group-hover:shadow-[0_0_60px_rgba(6,182,212,0.8)] transition-shadow rounded"></div><div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 mix-blend-overlay"></div><div className="relative z-10 text-center transform -skew-x-2">{isAnalyzing ? ( <div className="flex items-center gap-4"><div className="text-xl font-black text-white animate-pulse">SYSTEM ANALYZING</div><div className="w-24 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-white animate-progress"></div></div></div> ) : ( <><div className={`text-2xl font-black italic text-white tracking-tighter drop-shadow-lg ${fontClass}`}>{t.GAME_START}</div></> )}</div></button>
       </div>
@@ -1577,7 +1692,7 @@ const App: React.FC = () => {
         {currentThemeId === 'ignore' ? ( <div className="absolute bottom-24 left-0 w-full h-1 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.9)] z-20 opacity-80 pointer-events-none"></div> ) : currentThemeId === 'titan' ? ( <div className="absolute bottom-20 left-0 w-full h-[2px] bg-amber-500/80 shadow-[0_0_10px_rgba(245,158,11,0.5)] z-20 pointer-events-none"></div> ) : currentThemeId === 'queen' ? ( <div className="absolute bottom-16 left-0 w-full h-[2px] bg-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.8)] z-20 pointer-events-none"></div> ) : ( <div className="absolute bottom-20 left-0 w-full h-px bg-white/20 pointer-events-none z-20"></div> )}
         {hitEffects.map(effect => { const width = 100 / keyMode; const left = effect.laneIndex * width; return ( <HitEffect key={effect.id} x={`${left}%`} width={`${width}%`} rating={effect.rating} /> ); })}
         
-        {/* RENDER NOTES WITH OVERDRIVE PROP */}
+        {/* RENDER NOTES WITH OVERDRIVE & MODIFIERS PROP */}
         {renderNotes.map((note) => { 
             const config = activeLaneConfig[note.laneIndex]; 
             if (!config) return null; 
@@ -1588,7 +1703,8 @@ const App: React.FC = () => {
                     totalLanes={keyMode} 
                     color={config.color} 
                     theme={activeThemeObj} 
-                    isOverdrive={isOverdrive} 
+                    isOverdrive={isOverdrive}
+                    modifiers={modifiers}
                 /> 
             ); 
         })}
@@ -1598,7 +1714,16 @@ const App: React.FC = () => {
             {isOverdrive && ( <div className={`text-2xl md:text-4xl ${fontClass} font-black italic text-amber-400 animate-pulse mb-2 tracking-widest overdrive-active whitespace-nowrap`} style={{textShadow: '0 0 10px #fbbf24'}}>{t.X2_BONUS}</div> )}
             <div className="flex flex-col items-center">
                 <div className={`text-sm font-bold text-slate-500/50 tracking-[0.3em] mb-[-10px] ${fontClass}`}>{t.COMBO}</div>
-                <div key={combo} className={`text-9xl font-display font-black italic tracking-tighter opacity-20 ${combo > 0 ? 'animate-cyber-slam' : ''}`}>{combo}</div>
+                <div 
+                    key={combo} 
+                    className={`
+                        text-9xl font-display font-black italic tracking-tighter transition-all duration-100 pr-4
+                        ${combo > 0 ? 'animate-cyber-slam' : 'opacity-20'}
+                        ${combo >= 200 ? 'combo-tier-3' : combo >= 100 ? 'combo-tier-2' : combo >= 50 ? 'combo-tier-1' : 'combo-tier-0'}
+                    `}
+                >
+                    {combo}
+                </div>
             </div>
             {feedback && ( <div key={feedback.id} className={`mt-8 text-5xl font-black font-display italic ${feedback.color} animate-bounce-short drop-shadow-[0_0_10px_rgba(0,0,0,1)] stroke-black`}>{feedback.text}</div> )}
             
@@ -1646,12 +1771,17 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner pb-[env(safe-area-inset-bottom)]">
+                        {/* Speed Left */}
                         <div className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left">
                             <div className={`text-[8px] text-slate-400 font-bold ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="text-sm font-display text-white">{speedMod.toFixed(2)}</div>
                         </div>
-                        <div className="flex flex-col items-center bg-black px-3 py-1 rounded border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)]">
-                            <div className={`text-[8px] text-red-900 font-bold tracking-widest w-full text-center ${fontClass}`}>{t.SCORE}</div><div className="font-mono text-2xl text-red-600 font-bold tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">{score.toString().padStart(7, '0')}</div>
+                        
+                        {/* Center Score (Absolute) - No Rank - ROUNDED LG */}
+                        <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center bg-black px-6 py-1 rounded-xl border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)] z-10">
+                            <div className={`text-[8px] text-red-900 font-bold tracking-widest w-full text-center ${fontClass}`}>{t.SCORE}</div><div className="font-mono text-3xl text-red-600 font-bold tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">{score.toString().padStart(7, '0')}</div>
                         </div>
+
+                        {/* Pause Right */}
                         <div className="scale-90 origin-right"><button onClick={(e) => { e.stopPropagation(); togglePause(); playUiSound('select'); }} className="w-10 h-10 flex items-center justify-center bg-slate-300 border border-slate-400 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)] hover:bg-white active:scale-95 transition-all group"><div className="flex flex-col space-y-1"><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div></div></button></div>
                 </div>
             </div>
@@ -1669,9 +1799,13 @@ const App: React.FC = () => {
                              <div className={`h-full transition-all duration-200 ${isOverdrive ? 'bg-amber-100 animate-pulse' : 'bg-transparent'}`} style={{width: `${overdrive}%`, opacity: 0.5}}></div>
                         </div>
                     </div>
+                    {/* RANK TITAN THEME */}
+                    <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                        <div className={`text-3xl font-black italic opacity-50 ${currentRank === 'SSS' ? 'text-amber-100' : 'text-slate-600'}`}>{currentRank}</div>
+                    </div>
                     <div className="text-right"><div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SCORE_OUTPUT}</div><div className="text-2xl font-mono font-bold text-amber-100">{score.toString().padStart(7, '0')}</div></div>
                 </div>
-                <div className="flex-1 relative bg-slate-900/10 border-l border-r border-slate-800"><div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle, #78716c 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>{renderLanes()}</div>
+                <div className="flex-1 relative bg-slate-900/10 border-l-0 border-r-0 border-slate-800"><div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle, #78716c 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>{renderLanes()}</div>
                 <div className="h-4 bg-slate-800/80 border-t-2 border-amber-600/30 flex justify-center pb-[env(safe-area-inset-bottom)]"><div className="w-1/3 h-full bg-slate-700/80 rounded-b-lg"></div></div>
             </div>
         );
@@ -1760,7 +1894,7 @@ const App: React.FC = () => {
                 ) : ( <div className="absolute inset-0 bg-slate-950"></div> )}
             </div>
         )}
-        {(status === GameStatus.PLAYING || status === GameStatus.PAUSED || status === GameStatus.OUTRO) && (
+        {(status === GameStatus.PLAYING || status === GameStatus.PAUSED || status === GameStatus.RESUMING || status === GameStatus.OUTRO) && (
             <>
                 {mediaType === 'video' ? (
                     <video ref={mediaRef as React.RefObject<HTMLVideoElement>} src={localVideoSrc} className={`absolute inset-0 w-full h-full object-cover z-20 pointer-events-none touch-none ${isOverdrive ? 'overdrive-active brightness-125 saturate-150' : ''}`} onEnded={triggerOutro} playsInline 
@@ -1784,11 +1918,19 @@ const App: React.FC = () => {
       {showKeyConfig && ( <KeyConfigMenu currentKeyMode={keyMode} mappings={keyMappings} audioSettings={audioSettings} onAudioSettingsChange={setAudioSettings} layoutSettings={layoutSettings} onLayoutSettingsChange={handleLayoutChange} onSave={saveKeyMappings} onClose={() => setShowKeyConfig(false)} onPlaySound={playUiSound} t={t} fontClass={fontClass} /> )}
       {startCountdown !== null && ( <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"><div className="text-[15rem] font-black font-display text-cyan-400 animate-ping">{startCountdown}</div></div> )}
       
+      {/* RESUME COUNTDOWN OVERLAY */}
+      {status === GameStatus.RESUMING && resumeCountdown !== null && (
+          <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm">
+               <div className="text-4xl text-cyan-400 font-bold mb-4 animate-pulse">RESUMING</div>
+               <div className="text-[12rem] font-black font-display text-white animate-ping">{resumeCountdown > 0 ? resumeCountdown : "GO!"}</div>
+          </div>
+      )}
+      
       {status === GameStatus.OUTRO && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black animate-fade-in duration-1000">
               <div className="flex flex-col items-center animate-bounce-short">
-                  <h1 className="text-9xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-cyan-500 filter drop-shadow-[0_0_50px_rgba(6,182,212,0.8)]">DJ<span className="text-cyan-400">BIG</span></h1>
-                  <div className={`text-2xl font-mono text-cyan-200 tracking-[1em] mt-4 animate-pulse ${fontClass}`}>{t.MISSION_RESULTS}</div>
+                  <h1 className="text-5xl md:text-9xl font-display font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-cyan-500 filter drop-shadow-[0_0_50px_rgba(6,182,212,0.8)]">DJ<span className="text-cyan-400">BIG</span></h1>
+                  <div className={`text-lg md:text-2xl font-mono text-cyan-200 tracking-[1em] mt-4 animate-pulse ${fontClass} text-center`}>{t.MISSION_RESULTS}</div>
               </div>
           </div>
       )}
@@ -1979,8 +2121,18 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {(status === GameStatus.PLAYING || status === GameStatus.PAUSED) && ( 
+      {(status === GameStatus.PLAYING || status === GameStatus.PAUSED || status === GameStatus.RESUMING) && ( 
           <>
+            {/* NEW: TOP CENTER SCORE (Smaller & Higher) */}
+            <div className="absolute top-1 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center pointer-events-none pt-[env(safe-area-inset-top)]">
+                 <div className="bg-black/60 backdrop-blur px-4 py-1 border-b border-cyan-500 shadow-[0_2px_8px_rgba(6,182,212,0.3)] rounded-b-md flex flex-col items-center">
+                      <div className={`text-[8px] text-cyan-400 font-bold tracking-[0.3em] mb-0.5 ${fontClass}`}>{t.SCORE}</div>
+                      <div className="text-2xl font-mono text-white font-bold leading-none tracking-widest drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">
+                          {score.toString().padStart(7, '0')}
+                      </div>
+                 </div>
+            </div>
+
             <div className={`absolute bottom-8 z-30 hidden md:flex flex-col pointer-events-none transition-all duration-500 ${layoutSettings.lanePosition === 'right' ? 'left-8 items-start' : 'right-8 items-end'}`}>
                 <div className="text-[5rem] font-black font-display italic tracking-tighter leading-none select-none mb-[-1rem] transform -skew-x-12 opacity-80"
                      style={{
