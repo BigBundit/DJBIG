@@ -1,10 +1,9 @@
-
 import { Note } from '../types';
 
 /**
  * Analyzes an audio buffer to detect beats and generate a note chart.
  * Uses a dynamic threshold algorithm to detect energy peaks (onsets).
- * UPDATED: Includes Pattern Generator, Dynamic Density, and Rest Periods.
+ * UPDATED: Includes Pattern Generator, Dynamic Density, Rest Periods, and HOLD NOTES.
  */
 export const analyzeAudioAndGenerateNotes = async (
   audioBuffer: AudioBuffer, 
@@ -140,8 +139,6 @@ export const analyzeAudioAndGenerateNotes = async (
     const currentEnergy = energies[i];
     
     // --- FEATURE: QUIET SECTION DETECTION (REST) ---
-    // If energy is low (relative to average), force skip
-    // Increased threshold from 0.02 to 0.15 to catch verses/bridges
     if (currentEnergy < 0.15 * averageEnergy || currentEnergy < 0.02) {
         continue; 
     }
@@ -164,17 +161,65 @@ export const analyzeAudioAndGenerateNotes = async (
         // 1. Generate Main Note
         const laneIndex = getNextLane();
 
+        // --- HOLD NOTE LOGIC ---
+        // 15% chance to be a hold note, but only if not a fast pattern
+        // Level 7 has fewer holds
+        const holdChance = level === 7 ? 0.05 : 0.15;
+        const isHold = Math.random() < holdChance && patternState.type !== 'trill' && patternState.type !== 'stream';
+        
+        let duration = 0;
+        if (isHold) {
+            // Random duration between 200ms and ~800ms depending on gap
+            // Ensure we don't hold longer than the gap to next potential beat
+            const maxDuration = dynamicGap * 2.0; 
+            duration = Math.min(maxDuration, Math.random() * 600 + 200);
+            
+            // Round to nearest 50ms for cleaner gameplay
+            duration = Math.round(duration / 50) * 50;
+        }
+
         notes.push({
           id: noteId++,
           laneIndex: laneIndex,
           timestamp: timeMs,
           y: -10,
           hit: false,
-          missed: false
+          missed: false,
+          duration: duration,
+          isHold: duration > 0,
+          holding: false,
+          holdCompleted: false
         });
 
-        // 2. Chord Logic
-        if (currentEnergy > averageEnergy * chordThreshold && patternState.type !== 'trill' && patternState.type !== 'jack') {
+        // --- DUAL HOLD NOTE LOGIC (Normal Difficulty and above) ---
+        if (isHold && level >= 8 && Math.random() < 0.25) {
+             let secondLane = (laneIndex + Math.floor(laneCount / 2)) % laneCount;
+             if (secondLane === laneIndex) secondLane = (secondLane + 1) % laneCount;
+             
+             notes.push({
+                id: noteId++,
+                laneIndex: secondLane,
+                timestamp: timeMs,
+                y: -10,
+                hit: false,
+                missed: false,
+                duration: duration,
+                isHold: true,
+                holding: false,
+                holdCompleted: false
+              });
+        }
+        
+        // If it was a hold, update lastNoteTime to end of hold to prevent overlap
+        if (duration > 0) {
+            lastNoteTime = timeMs + duration * 0.8; // Allow slight overlap for faster feel
+        } else {
+            lastNoteTime = timeMs;
+        }
+
+        // 2. Chord Logic (Tap Only)
+        // Chords shouldn't happen during a hold (on same lane, handled by pattern generator but check overlap)
+        if (!isHold && currentEnergy > averageEnergy * chordThreshold && patternState.type !== 'trill' && patternState.type !== 'jack') {
              let secondLane = (laneIndex + Math.floor(laneCount / 2)) % laneCount;
              if (secondLane === laneIndex) secondLane = (secondLane + 1) % laneCount;
 
@@ -184,27 +229,13 @@ export const analyzeAudioAndGenerateNotes = async (
                 timestamp: timeMs,
                 y: -10,
                 hit: false,
-                missed: false
+                missed: false,
+                duration: 0,
+                isHold: false,
+                holding: false,
+                holdCompleted: false
               });
         }
-        
-        // 3. Triple Logic
-        if (level === 10 && currentEnergy > averageEnergy * 2.5) {
-             const thirdLane = (laneIndex + 2) % laneCount;
-             const existing = notes.filter(n => Math.abs(n.timestamp - timeMs) < 1);
-             if (!existing.some(n => n.laneIndex === thirdLane)) {
-                notes.push({
-                    id: noteId++,
-                    laneIndex: thirdLane,
-                    timestamp: timeMs,
-                    y: -10,
-                    hit: false,
-                    missed: false
-                });
-             }
-        }
-
-        lastNoteTime = timeMs;
       }
     }
   }

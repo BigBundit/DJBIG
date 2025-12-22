@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -132,13 +131,28 @@
         100% { transform: translate(var(--tw-translate-x), var(--tw-translate-y)) scale(0); opacity: 0; }
       }
 
-      /* Overdrive Chromatic Aberration */
+      /* NEW: INTENSE FIRE EXPLOSION ANIMATIONS */
+      @keyframes explosion-core {
+        0% { transform: scale(0.3); opacity: 1; filter: brightness(3) contrast(1.5); }
+        30% { transform: scale(1.3); opacity: 1; filter: brightness(2); }
+        100% { transform: scale(3.0); opacity: 0; filter: blur(8px); }
+      }
+      
+      @keyframes explosion-ring {
+         0% { transform: scale(0.4); opacity: 0; border-width: 8px; }
+         20% { opacity: 1; }
+         100% { transform: scale(2.5); opacity: 0; border-width: 0px; }
+      }
+      
+      @keyframes spark-fly {
+         0% { transform: translate(0,0) scale(1); opacity: 1; }
+         100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+      }
+
+      /* Overdrive Chromatic Aberration - SIMPLIFIED for performance */
       @keyframes chromatic-pulse {
-        0% { text-shadow: 2px 0 #f00, -2px 0 #0ff; transform: translate(0,0); }
-        25% { text-shadow: -2px 0 #f00, 2px 0 #0ff; transform: translate(1px, 1px); }
-        50% { text-shadow: 2px 0 #f00, -2px 0 #0ff; transform: translate(-1px, -1px); }
-        75% { text-shadow: -2px 0 #f00, 2px 0 #0ff; transform: translate(1px, -1px); }
-        100% { text-shadow: 2px 0 #f00, -2px 0 #0ff; transform: translate(0,0); }
+        0%, 100% { transform: translate(0,0); }
+        50% { transform: translate(1px, 1px); }
       }
 
       /* RAINBOW STROBE FOR OVERDRIVE BAR (OPTIMIZED: NO BOX SHADOW) */
@@ -151,15 +165,24 @@
         100% { background-color: #ef4444; }
       }
       .animate-rainbow {
-        animation: rainbow-bg 0.3s linear infinite;
+        animation: rainbow-bg 0.5s linear infinite;
+      }
+
+      /* BRIGHTNESS PULSE FOR OVERDRIVE (FIXES "FAINT" NOTES) */
+      @keyframes overdrive-pulse {
+        0%, 100% { filter: brightness(1) contrast(1); }
+        50% { filter: brightness(1.8) contrast(1.2) drop-shadow(0 0 10px white); }
+      }
+      .animate-overdrive-pulse {
+        animation: overdrive-pulse 0.4s infinite;
       }
 
       .overdrive-active {
-        animation: chromatic-pulse 0.1s infinite;
+        animation: chromatic-pulse 0.2s infinite;
       }
 
       .overdrive-border {
-        box-shadow: 0 0 30px rgba(245, 158, 11, 0.6), inset 0 0 20px rgba(245, 158, 11, 0.3);
+        border-color: #fbbf24;
       }
 
       /* Vintage TV Effects */
@@ -271,7 +294,7 @@
       }
       @keyframes pulse-fast {
         0%, 100% { transform: scale(1); opacity: 0.8; }
-        50% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 30px currentColor; }
+        50% { transform: scale(1.05); opacity: 1; }
       }
       @keyframes float-particle {
         0% { transform: translate(0,0); opacity: 0; }

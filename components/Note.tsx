@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Note as NoteType, LaneColor, Theme, GameModifiers } from '../types';
 
@@ -14,53 +13,49 @@ interface NoteProps {
 export const Note: React.FC<NoteProps> = ({ note, totalLanes, color, theme, isOverdrive, modifiers }) => {
     const widthPerc = 100 / totalLanes;
     const leftPos = `${note.laneIndex * widthPerc}%`;
+    const showHighlight = theme.noteShape === 'rect' || theme.noteShape === 'square';
     
-    // Construct styles
-    // We adjust height and visuals based on theme
-    
-    let shapeClass = '';
-    let innerContent = null;
+    // VISUAL PROPERTIES
     let opacity = 1;
 
     // --- MODIFIER LOGIC (VISUALS) ---
-    // Updated: Sudden now appears much earlier (at 25% instead of 50%)
     if (modifiers) {
         if (modifiers.hidden) {
-            // HIDDEN: Visible Top (0-50%), Invisible Bottom (50-100%)
-            if (note.y > 50) {
-                opacity = 0;
-            } else {
-                opacity = Math.max(0, 1 - ((note.y - 40) / 10)); 
-            }
+            if (note.y > 50) opacity = 0;
+            else opacity = Math.max(0, 1 - ((note.y - 40) / 10)); 
         } else if (modifiers.sudden) {
-            // SUDDEN: Invisible Top (0-25%), Visible Bottom (25-100%)
-            // This gives "another half screen" of visibility compared to 50%
             const threshold = 25;
-            if (note.y < threshold) {
-                opacity = 0;
-            } else {
-                 // Fade in quickly
-                opacity = Math.min(1, (note.y - threshold) / 10);
-            }
+            if (note.y < threshold) opacity = 0;
+            else opacity = Math.min(1, (note.y - threshold) / 10);
         }
     }
 
+    // BASE STYLE (The Head)
     let containerStyle: React.CSSProperties = {
         left: leftPos, 
-        top: `${note.y}%`,
+        top: `${note.y}%`, 
         width: `${widthPerc}%`,
-        height: '3%', // Default height
-        transform: 'translateZ(0)', // Force GPU acceleration
-        willChange: 'top, opacity', // Optimize for movement
-        opacity: opacity
+        height: '3%', 
+        transform: 'translateZ(0)', 
+        willChange: 'top, opacity',
+        opacity: opacity,
+        position: 'absolute',
+        zIndex: 20,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '0 2px'
     };
 
     const colorClass = `${color.bg} ${color.noteShadow}`;
+    let shapeClass = '';
+    let innerContent = null;
 
+    // THEME SHAPE LOGIC
     switch (theme.noteShape) {
         case 'circle':
             shapeClass = `rounded-full ${colorClass}`;
-            containerStyle.height = '4%'; // Slightly taller for circle aspect
+            containerStyle.height = '4%';
             break;
         case 'diamond':
             shapeClass = `rotate-45 scale-75 ${colorClass} rounded-sm`;
@@ -68,9 +63,8 @@ export const Note: React.FC<NoteProps> = ({ note, totalLanes, color, theme, isOv
             break;
         case 'arrow':
             shapeClass = `${color.bg}`;
-            // CSS Triangle
             containerStyle.clipPath = 'polygon(0% 0%, 100% 0%, 50% 100%)';
-            containerStyle.filter = `drop-shadow(0 0 10px ${color.base})`; // Drop shadow works differently with clip-path
+            containerStyle.filter = `drop-shadow(0 0 10px ${color.base})`;
             containerStyle.height = '4%';
             break;
         case 'hex':
@@ -83,23 +77,56 @@ export const Note: React.FC<NoteProps> = ({ note, totalLanes, color, theme, isOv
             innerContent = '★';
             containerStyle.height = '4%';
             break;
-        case 'square':
-            shapeClass = `${colorClass}`; // No rounding
-            break;
         default: // rect
             shapeClass = `rounded-[2px] ${colorClass}`;
             break;
     }
 
-    // Adjust for specific themes having standard inner highlights
-    const showHighlight = theme.noteShape === 'rect' || theme.noteShape === 'circle' || theme.noteShape === 'square';
+    // --- HOLD NOTE RENDERING ---
+    if (note.isHold) {
+        const holdLength = (note as any).length || 0;
+        
+        const holdContainerStyle: React.CSSProperties = {
+            left: leftPos,
+            top: `${note.y - holdLength}%`,
+            height: `${holdLength}%`,
+            width: `${widthPerc}%`,
+            position: 'absolute',
+            zIndex: 15, // Below taps
+            opacity: opacity,
+            transform: 'translateZ(0)',
+            willChange: 'top',
+            padding: '0 2px', 
+            display: 'flex',
+            flexDirection: 'column'
+        };
+        
+        const barColor = `bg-${color.base}-600`;
+        const borderColor = `border-${color.base}-400`;
+        
+        return (
+            <div style={holdContainerStyle} className="pointer-events-none">
+                <div className={`w-full h-full ${barColor} border-x-2 ${borderColor} rounded-sm relative overflow-hidden flex flex-col shadow-md ${isOverdrive ? 'animate-overdrive-pulse' : ''}`}>
+                    <div className={`w-full h-[4px] bg-${color.base}-400`}></div>
+                    <div className="flex-1 w-full relative">
+                        {note.holding && (
+                            <div className="absolute inset-0 bg-white/40 animate-pulse"></div>
+                        )}
+                        <div className={`absolute left-1/2 top-0 bottom-0 w-[2px] bg-${color.base}-400/50 -translate-x-1/2`}></div>
+                    </div>
+                    <div className={`w-full h-[4px] bg-${color.base}-400`}></div>
+                </div>
+                {note.holding && (
+                    <div className={`absolute bottom-0 left-0 right-0 h-16 bg-${color.base}-400/60 blur-xl`}></div>
+                )}
+            </div>
+        );
+    }
 
+    // RENDER TAP NOTE
     return (
-        <div 
-            className="absolute z-20 px-[2px] flex justify-center items-center"
-            style={containerStyle}
-        >
-            <div className={`w-full h-full relative transition-all ${shapeClass}`}>
+        <div className="absolute z-20 px-[2px] flex justify-center items-center" style={containerStyle}>
+            <div className={`w-full h-full relative transition-all ${shapeClass} ${isOverdrive ? 'animate-overdrive-pulse' : ''}`}>
                 {showHighlight && <div className="absolute inset-x-0 top-0 h-[40%] bg-white/60 w-full"></div>}
                 {innerContent}
             </div>

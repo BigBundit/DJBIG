@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { LaneConfig, Theme } from '../types';
 
@@ -30,11 +29,10 @@ export const Lane: React.FC<LaneProps> = ({ config, active, onTrigger, onRelease
             let appearanceClasses = '';
             
             if (isOverdrive) {
-                 // Rainbow Mode for Overdrive
+                 // Static highlight for Overdrive (No blinking)
                  appearanceClasses = `
-                    animate-rainbow 
-                    border-white/20
-                    ${active ? 'translate-y-1 brightness-150' : 'opacity-90'}
+                    bg-amber-400 border-white/40
+                    ${active ? 'translate-y-1 brightness-125' : 'opacity-100'}
                  `;
             } else {
                  // Normal Mode
@@ -48,12 +46,13 @@ export const Lane: React.FC<LaneProps> = ({ config, active, onTrigger, onRelease
                 <div className={`${buttonBase} ${appearanceClasses}`}>
                     {!isOverdrive && <div className={`w-full h-full absolute inset-0 rounded-lg opacity-30 ${active ? `bg-${config.color.base}-500` : ''}`}></div>}
                     <div className="absolute top-0 left-0 right-0 h-1/2 bg-white/5 rounded-t-lg"></div>
+                    {isOverdrive && <div className="absolute inset-0 bg-white/10 pointer-events-none"></div>}
                 </div>
             );
         } else if (theme.id === 'titan') {
             // "TITAN CONSTRUCT" - INDUSTRIAL BRACKET STYLE
-            const borderColor = isOverdrive ? 'border-white animate-rainbow' : (active ? `border-${config.color.base}-500` : 'border-slate-600');
-            const glowColor = isOverdrive ? 'bg-white animate-rainbow shadow-[0_0_15px_white]' : (active ? `bg-${config.color.base}-500 shadow-[0_0_15px_currentColor]` : 'bg-slate-800');
+            const borderColor = isOverdrive ? 'border-amber-400' : (active ? `border-${config.color.base}-500` : 'border-slate-600');
+            const glowColor = isOverdrive ? 'bg-amber-300' : (active ? `bg-${config.color.base}-500 shadow-[0_0_15px_currentColor]` : 'bg-slate-800');
             
             return (
                 <div className={`absolute bottom-4 left-1 right-1 h-16 flex items-end justify-center transition-all duration-75 z-30 ${active ? 'scale-95' : ''}`}>
@@ -69,9 +68,8 @@ export const Lane: React.FC<LaneProps> = ({ config, active, onTrigger, onRelease
             );
         } else if (theme.id === 'queen') {
              // "QUEEN PROTOCOL" - GLOWING KEYBOARD KEY STYLE
-             // Override pink with rainbow if overdrive
-             const bgClass = isOverdrive ? 'animate-rainbow border-white' : (active ? 'border-pink-400 bg-pink-600' : 'border-pink-900 bg-slate-900');
-             const shadowClass = isOverdrive ? 'shadow-[0_0_30px_rgba(255,255,255,0.8)]' : (active ? 'shadow-[0_0_30px_rgba(236,72,153,1)]' : 'shadow-[0_0_15px_rgba(236,72,153,0.3)]');
+             const bgClass = isOverdrive ? 'bg-amber-500 border-white' : (active ? 'border-pink-400 bg-pink-600' : 'border-pink-900 bg-slate-900');
+             const shadowClass = isOverdrive ? 'shadow-[0_0_15px_rgba(251,191,36,0.5)]' : (active ? 'shadow-[0_0_30px_rgba(236,72,153,1)]' : 'shadow-[0_0_15px_rgba(236,72,153,0.3)]');
 
             return (
                 <div className={`absolute bottom-3 left-1 right-1 h-16 flex items-end justify-center transition-all duration-75 z-30`}>
@@ -92,13 +90,11 @@ export const Lane: React.FC<LaneProps> = ({ config, active, onTrigger, onRelease
                         {/* Top Highlight */}
                         <div className="absolute top-0 inset-x-0 h-1/2 bg-white/5 rounded-t-md"></div>
                     </div>
-                    {/* Underglow Reflection */}
-                    {(active || isOverdrive) && <div className={`absolute -bottom-2 w-full h-2 blur-md opacity-50 ${isOverdrive ? 'bg-white animate-pulse' : 'bg-pink-500'}`}></div>}
                 </div>
             );
         } else {
             // "NEON CORE" - CLASSIC LINE/GLOW STYLE
-            const lineClass = isOverdrive ? 'animate-rainbow shadow-[0_0_20px_white]' : (active ? `bg-${config.color.base}-400 shadow-[0_0_20px_rgba(255,255,255,0.8)]` : `bg-slate-600/50 border-x border-${config.color.base}-500/30`);
+            const lineClass = isOverdrive ? 'bg-amber-400 shadow-[0_0_10px_white]' : (active ? `bg-${config.color.base}-400 shadow-[0_0_20px_rgba(255,255,255,0.8)]` : `bg-slate-600/50 border-x border-${config.color.base}-500/30`);
 
             return (
                 <div className={`absolute bottom-0 left-0 w-full h-full flex flex-col justify-end pointer-events-none z-30`}>

@@ -1,4 +1,5 @@
 
+
 export enum GameStatus {
     TITLE,
     MENU,
@@ -39,6 +40,12 @@ export interface Note {
     y: number; // current vertical position (0-100%)
     hit: boolean;
     missed: boolean;
+    
+    // HOLD NOTE PROPERTIES
+    duration: number; // Length of hold in ms. 0 = Tap note
+    isHold: boolean;
+    holding: boolean; // Is currently being held?
+    holdCompleted: boolean; // Successfully held until end
 }
 
 export interface HitEffectData {

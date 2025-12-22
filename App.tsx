@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StatusBar } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -23,7 +22,8 @@ import {
   LANE_CONFIGS_7,
   BASE_FALL_SPEED_MS,
   DEFAULT_KEY_MAPPINGS,
-  GAME_THEMES
+  GAME_THEMES,
+  HOLD_TICK_SCORE
 } from './constants';
 import { Lane } from './components/Lane';
 import { EndScreen } from './components/EndScreen';
@@ -1259,6 +1259,12 @@ const App: React.FC = () => {
         if (hitType !== null) {
             targetNote.hit = true;
             
+            // --- HOLD NOTE LOGIC START ---
+            if (targetNote.isHold) {
+                targetNote.holding = true;
+            }
+            // --- HOLD NOTE LOGIC END ---
+            
             const newEffect: HitEffectData = {
                 id: Date.now() + Math.random(),
                 laneIndex: laneIndex,
@@ -1274,7 +1280,7 @@ const App: React.FC = () => {
                 setScore(s => s + (100 * multiplier) + (combo > 10 ? 10 : 0));
                 setPerfectCount(c => c + 1);
                 setHealth(h => Math.min(100, h + 0.5));
-                setFeedback({ text: isOverdrive ? "MAX 100% x2" : "MAX 100%", color: isOverdrive ? "text-amber-300" : "text-amber-100", id: Date.now() });
+                setFeedback({ text: isOverdrive ? "PERFECT x2" : "PERFECT", color: isOverdrive ? "text-amber-300" : "text-amber-100", id: Date.now() });
                 
                 // OVERDRIVE BUILD UP
                 if (!isOverdrive) {
@@ -1285,18 +1291,16 @@ const App: React.FC = () => {
                 setScore(s => s + (50 * multiplier));
                 setGoodCount(c => c + 1);
                 setHealth(h => Math.min(100, h + 0.1));
-                setFeedback({ text: isOverdrive ? "90% x2" : "90%", color: "text-green-400", id: Date.now() });
+                setFeedback({ text: isOverdrive ? "GOOD x2" : "GOOD", color: "text-green-400", id: Date.now() });
                 
                 if (!isOverdrive) {
                     setOverdrive(o => Math.min(100, o + 1.0));
                 }
             } else {
                 setScore(s => s + (10 * multiplier));
-                setFeedback({ text: "10%", color: "text-yellow-400", id: Date.now() });
+                setFeedback({ text: "BAD", color: "text-yellow-400", id: Date.now() });
                 // Penalty to overdrive
                 if (!isOverdrive) setOverdrive(o => Math.max(0, o - 5));
-                
-                // Bad doesn't count for accuracy weight in our simplified logic, effectively 0 like miss but gives score
             }
 
             setCombo(c => {
@@ -1318,7 +1322,40 @@ const App: React.FC = () => {
         next[laneIndex] = false;
         return next;
     });
-  }, []);
+    
+    // --- HOLD NOTE RELEASE LOGIC ---
+    if (statusRef.current === GameStatus.PLAYING && !isAutoPlay) {
+         // Find active hold note in this lane
+         const holdingNote = notesRef.current.find(n => n.laneIndex === laneIndex && n.holding && !n.holdCompleted);
+         if (holdingNote) {
+             holdingNote.holding = false;
+             
+             // Time check
+             let elapsed = 0;
+             if (mediaRef.current && !mediaRef.current.paused) {
+                elapsed = mediaRef.current.currentTime * 1000 + START_OFFSET_MS;
+             } else {
+                const now = performance.now();
+                elapsed = now - startTimeRef.current - totalPauseDurationRef.current;
+             }
+             const adjustedTime = elapsed - audioSettingsRef.current.audioOffset;
+             const endTime = holdingNote.timestamp + holdingNote.duration;
+             
+             // If released too early (more than 200ms before end)
+             if (adjustedTime < endTime - 200) {
+                 holdingNote.missed = true;
+                 holdingNote.holdCompleted = true; // Stop processing
+                 
+                 setCombo(0);
+                 setMissCount(c => c + 1);
+                 setHealth(h => Math.max(0, h - 5));
+                 setFeedback({ text: "MISS", color: "text-red-500", id: Date.now() }); // Changed from DROP to MISS
+                 setIsShaking(true);
+                 setTimeout(() => setIsShaking(false), 200);
+             }
+         }
+    }
+  }, [status, isAutoPlay, audioSettings]);
 
   const handleTouch = useCallback((e: React.TouchEvent) => {
     if (e.cancelable) e.preventDefault();
@@ -1354,7 +1391,7 @@ const App: React.FC = () => {
 
   // Game Loop
   const update = useCallback(() => {
-    if (status !== GameStatus.PLAYING) return;
+    if (statusRef.current !== GameStatus.PLAYING) return;
 
     if (bgRef.current) {
          const time = Date.now() / 1000;
@@ -1363,35 +1400,28 @@ const App: React.FC = () => {
     }
 
     // OVERDRIVE LOGIC
-    // Auto-activate when full
     if (overdrive >= 100 && !isOverdrive) {
         setIsOverdrive(true);
-        
-        // PLAY OVERDRIVE SFX (Web Audio API Buffer Source for Low Latency)
         if (audioCtxRef.current && overdriveBufferRef.current) {
              const ctx = audioCtxRef.current;
              const source = ctx.createBufferSource();
              source.buffer = overdriveBufferRef.current;
-             
              const gainNode = ctx.createGain();
              const vol = audioSettingsRef.current.masterVolume * audioSettingsRef.current.sfxVolume;
              gainNode.gain.setValueAtTime(vol, ctx.currentTime);
-             
              source.connect(gainNode);
              gainNode.connect(ctx.destination);
              source.start(0);
         } else {
-             playUiSound('scratch'); // Fallback
+             playUiSound('scratch');
         }
-
         triggerHaptic('heavy');
         setFeedback({ text: t.LIMIT_BREAK, color: "text-amber-400", id: Date.now() });
     }
 
-    // Drain over time
     if (isOverdrive) {
         setOverdrive(prev => {
-            const next = prev - 0.15; // Drains in roughly 10 seconds at 60fps
+            const next = prev - 0.15;
             if (next <= 0) {
                 setIsOverdrive(false);
                 return 0;
@@ -1400,30 +1430,25 @@ const App: React.FC = () => {
         });
     }
 
-    // --- TIME SYNC WITH DELAY START LOGIC ---
+    // --- TIME SYNC ---
     let elapsed = 0;
     const now = performance.now();
     const timeSinceStart = now - startTimeRef.current - totalPauseDurationRef.current;
 
     if (timeSinceStart < START_OFFSET_MS) {
-        // WARMUP PHASE: Media is paused, notes scroll based on clock
         elapsed = timeSinceStart;
         if (mediaRef.current && !mediaRef.current.paused) mediaRef.current.pause(); 
     } else {
-        // PLAYING PHASE: Media should be running
         if (mediaType === 'video' && mediaRef.current) {
              if (mediaRef.current.paused && !mediaRef.current.ended) {
                  mediaRef.current.play().catch(() => {});
              }
-             // Sync to media time + offset
              elapsed = mediaRef.current.currentTime * 1000 + START_OFFSET_MS;
         } else {
-             // Audio Mode (Buffer fallback) or just using clock
              elapsed = timeSinceStart;
         }
     }
     
-    // Apply User Offset
     const adjustedTime = elapsed - audioSettingsRef.current.audioOffset;
     
     if (progressBarRef.current && audioDurationRef.current > 0) {
@@ -1440,56 +1465,81 @@ const App: React.FC = () => {
     const currentFallSpeed = BASE_FALL_SPEED_MS / speedMod;
     const hitLineY = 90;
 
+    // Optimized Note Processing
     notesRef.current.forEach(note => {
-      // Calculate position relative to target time (note.timestamp includes offset now)
       const timeDelta = adjustedTime - note.timestamp; 
-      const position = hitLineY + ((timeDelta / currentFallSpeed) * hitLineY);
+      note.y = hitLineY + ((timeDelta / currentFallSpeed) * hitLineY);
 
-      note.y = position;
+      if (note.isHold && note.holding && !note.holdCompleted) {
+          const endTime = note.timestamp + note.duration;
+          setScore(s => s + (HOLD_TICK_SCORE * (isOverdrive ? 2 : 1)));
+          if (adjustedTime >= endTime) {
+              note.holdCompleted = true;
+              note.holding = false;
+              setScore(s => s + (200 * (isOverdrive ? 2 : 1)));
+              setCombo(c => {
+                 const newC = c + 1;
+                 setMaxCombo(prev => Math.max(prev, newC));
+                 return newC;
+              });
+              setFeedback({ text: "PERFECT", color: "text-cyan-300", id: Date.now() });
+              setHitEffects(prev => [...prev, { id: Date.now() + Math.random(), laneIndex: note.laneIndex, rating: ScoreRating.PERFECT, timestamp: performance.now() }]);
+          }
+      }
 
-      // AUTO PLAY
-      if (isAutoPlay && !note.hit && !note.missed) {
-          if (timeDelta >= 0) {
+      if (isAutoPlay && !note.hit && !note.missed && timeDelta >= 0) {
             note.hit = true;
-            // Visual feedback for autoplay
+            if (note.isHold) note.holding = true;
             setActiveLanesState(prev => { const n = [...prev]; n[note.laneIndex] = true; return n; });
-            setTimeout(() => { 
-                setActiveLanesState(prev => { const n = [...prev]; n[note.laneIndex] = false; return n; });
-            }, 50);
-            
+            if (!note.isHold) {
+                setTimeout(() => { setActiveLanesState(prev => { const n = [...prev]; n[note.laneIndex] = false; return n; }); }, 50);
+            }
             playHitSound(note.laneIndex);
-            setHitEffects(prev => [...prev, { id: Date.now() + Math.random(), laneIndex: note.laneIndex, rating: ScoreRating.PERFECT, timestamp: performance.now() }]);
+            if (!note.isHold) {
+                setHitEffects(prev => [...prev, { id: Date.now() + Math.random(), laneIndex: note.laneIndex, rating: ScoreRating.PERFECT, timestamp: performance.now() }]);
+            }
             setFeedback({ text: t.AUTO_PILOT, color: "text-fuchsia-500", id: Date.now() });
             setCombo(c => {
                     const newC = c + 1;
                     setMaxCombo(prev => Math.max(prev, newC));
                     return newC;
             });
-            // Autoplay builds overdrive slowly
-             if (!isOverdrive) setOverdrive(o => Math.min(100, o + 0.5));
-          }
+            if (!isOverdrive) setOverdrive(o => Math.min(100, o + 0.5));
+      }
+      
+      if (isAutoPlay && note.isHold && note.holding && !note.holdCompleted && adjustedTime >= note.timestamp + note.duration) {
+          note.holdCompleted = true;
+          note.holding = false;
+          setActiveLanesState(prev => { const n = [...prev]; n[note.laneIndex] = false; return n; });
+          setHitEffects(prev => [...prev, { id: Date.now() + Math.random(), laneIndex: note.laneIndex, rating: ScoreRating.PERFECT, timestamp: performance.now() }]);
       }
 
-      // MISS
-      const missThresholdTime = 250; 
-      if (!note.hit && !note.missed && timeDelta > missThresholdTime) {
+      if (!note.hit && !note.missed && timeDelta > 250) {
         note.missed = true;
         setMissCount(c => c + 1);
         setCombo(0);
         setHealth(h => Math.max(0, h - 4));
         setFeedback({ text: "MISS", color: "text-red-500", id: Date.now() });
         setIsShaking(true);
-        triggerHaptic('heavy'); // Using new helper
+        triggerHaptic('heavy'); 
         setTimeout(() => setIsShaking(false), 200);
-        
-        // MISS breaks overdrive
         if (isOverdrive) setIsOverdrive(false);
         setOverdrive(o => Math.max(0, o - 20));
       }
     });
 
-    const visibleNotes = notesRef.current.filter(n => n.y > -20 && n.y < 120 && !n.hit);
-    setRenderNotes([...visibleNotes]); 
+    const visibleNotesList = notesRef.current.filter(n => {
+        if (n.isHold && !n.holdCompleted && !n.missed) return true;
+        return n.y > -50 && n.y < 120 && !n.hit;
+    }).map(n => {
+        if (n.isHold) {
+             const lengthPerc = (n.duration / currentFallSpeed) * 90;
+             return { ...n, length: lengthPerc };
+        }
+        return n;
+    });
+    
+    setRenderNotes(visibleNotesList); 
 
     if (health <= 0) {
       triggerOutro();
@@ -1497,22 +1547,18 @@ const App: React.FC = () => {
     }
     
     setHitEffects(prev => prev.filter(e => Date.now() - e.id < 500));
-
     frameRef.current = requestAnimationFrame(update);
-  }, [status, health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile, t, mediaType, triggerHaptic, isOverdrive, overdrive]);
+  }, [health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile, t, mediaType, triggerHaptic, isOverdrive, overdrive]);
 
   useEffect(() => {
     if (status === GameStatus.PLAYING) {
       frameRef.current = requestAnimationFrame(update);
-      // Removed immediate media play here; handled in update loop for delay
-      if (bgVideoRef.current) {
-        bgVideoRef.current.play().catch(() => {});
-      }
+      if (bgVideoRef.current) bgVideoRef.current.play().catch(() => {});
     }
     return () => cancelAnimationFrame(frameRef.current);
   }, [status, update]);
 
-  // ... (Input Handling: handleExit, handleKeyDown, handleKeyUp - Identical) ...
+  // ... (Input Handling)
   const handleExit = () => { try { window.close(); } catch (e) {} window.location.href = "about:blank"; };
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((showKeyConfig) && e.key === 'Escape') { setShowKeyConfig(false); return; }
@@ -1530,8 +1576,6 @@ const App: React.FC = () => {
     if (e.key === 'F1') { e.preventDefault(); setSpeedMod(prev => Math.max(1.0, prev - 0.5)); setFeedback({ text: "SPEED DOWN", color: "text-white", id: Date.now() }); }
     if (e.key === 'F2') { e.preventDefault(); setSpeedMod(prev => Math.min(10.0, prev + 0.5)); setFeedback({ text: "SPEED UP", color: "text-white", id: Date.now() }); }
     if (e.key === 'F4') { e.preventDefault(); setIsAutoPlay(prev => !prev); setFeedback({ text: isAutoPlay ? "AUTO OFF" : "AUTO ON", color: "text-fuchsia-400", id: Date.now() }); }
-    if (e.key === 'F8') { e.preventDefault(); const isMuted = audioSettingsRef.current.masterVolume === 0; setAudioSettings(prev => ({ ...prev, masterVolume: isMuted ? 0.5 : 0 })); setFeedback({ text: isMuted ? "SOUND ON" : "MUTED", color: "text-white", id: Date.now() }); }
-    if (e.key === 'F9') { e.preventDefault(); triggerOutro(); return; }
     const laneIndex = activeLaneConfig.findIndex(l => l.key === e.code);
     if (laneIndex !== -1) triggerLane(laneIndex);
   }, [status, triggerLane, triggerOutro, togglePause, isAutoPlay, activeLaneConfig, showKeyConfig]);
@@ -1554,18 +1598,15 @@ const App: React.FC = () => {
     initAudio();
     playUiSound('select');
     stopPreview(); 
-    
-    // Close Mobile Setup if open
     setShowMobileSetup(false);
 
     if (!localVideoSrc) { alert("Please select a track first."); return; }
     if (!analyzedNotes) { alert("Please wait for analysis to complete."); return; }
 
-    // FORCE UNPAUSE if needed
-    if (status === GameStatus.PAUSED) {
-        // Just reset pause vars
-        pauseTimeRef.current = 0;
-        totalPauseDurationRef.current = 0;
+    // Pre-buffer media to avoid lag at start
+    if (mediaRef.current) {
+        mediaRef.current.currentTime = 0;
+        mediaRef.current.pause();
     }
 
     setStartCountdown(3);
@@ -1584,44 +1625,41 @@ const App: React.FC = () => {
 
   const startGame = (useBufferPlayback: boolean, notesOverride?: NoteType[]) => {
     let notesToUse = notesOverride || analyzedNotes;
-    
-    // APPLY MIRROR MODIFIER
     if (notesToUse && modifiers.mirror) {
-        // Deep copy to avoid mutating original analysis
-        notesToUse = notesToUse.map(n => ({
-            ...n,
-            laneIndex: (keyMode - 1) - Number(n.laneIndex)
-        }));
+        notesToUse = notesToUse.map(n => ({ ...n, laneIndex: (keyMode - 1) - Number(n.laneIndex) }));
     }
 
     if (notesToUse) {
         notesRef.current = notesToUse.map(n => ({
             id: Number(n.id),
             laneIndex: Number(n.laneIndex),
-            timestamp: Number(n.timestamp), // Already includes OFFSET from analyzer
+            timestamp: Number(n.timestamp),
             y: Number(n.y),
             hit: Boolean(n.hit),
-            missed: Boolean(n.missed)
+            missed: Boolean(n.missed),
+            duration: Number(n.duration) || 0,
+            isHold: Boolean(n.isHold),
+            holding: false,
+            holdCompleted: false
         }));
     } else {
         notesRef.current = [];
     }
 
     activeKeysRef.current = new Array(keyMode).fill(false);
-    setActiveLanesState(new Array(keyMode).fill(false)); // Reset visual state
+    setActiveLanesState(new Array(keyMode).fill(false));
     setScore(0); setCombo(0); setMaxCombo(0); setHealth(100);
-    setOverdrive(0); setIsOverdrive(false); // Reset Overdrive
+    setOverdrive(0); setIsOverdrive(false);
     setMissCount(0); setPerfectCount(0); setGoodCount(0);
     setHitEffects([]); setIsAutoPlay(false);
-    setFeedback(null); // RESET FEEDBACK
-    setIsShaking(false); // RESET SHAKE
+    setFeedback(null); 
+    setIsShaking(false);
     totalPauseDurationRef.current = 0;
-    setCurrentRank('SSS'); // RESET RANK
+    setCurrentRank('SSS');
     
     setStatus(GameStatus.PLAYING);
-    startTimeRef.current = performance.now(); // Mark start time
+    startTimeRef.current = performance.now();
 
-    // Pause media immediately to ensure delay works
     if (mediaRef.current) {
         mediaRef.current.pause();
         mediaRef.current.currentTime = 0;
@@ -1631,38 +1669,17 @@ const App: React.FC = () => {
   const quitGame = () => { playUiSound('select'); setStatus(GameStatus.MENU); setHitEffects([]); };
   const DIFFICULTY_OPTIONS = [ { label: t.EASY, value: 7, color: 'bg-green-500 shadow-green-500/50' }, { label: t.NORMAL, value: 8, color: 'bg-yellow-500 shadow-yellow-500/50' }, { label: t.HARD, value: 9, color: 'bg-orange-500 shadow-orange-500/50' }, { label: t.EXPERT, value: 10, color: 'bg-red-500 shadow-red-500/50' } ];
   
-  // Reusable Settings Component to avoid duplication between Desktop Right Column and Mobile Modal
   const SettingsPanelContent = () => (
       <div className="flex flex-col space-y-4">
          <div className="bg-slate-900/80 border border-slate-700 p-4 rounded-lg backdrop-blur-md shadow-lg flex flex-col space-y-2">
              <div><div className={`text-xs font-bold text-slate-500 mb-2 tracking-widest ${fontClass}`}>{t.LEVEL}</div><div className="flex gap-2 h-10">{DIFFICULTY_OPTIONS.map((diff) => { const active = level === diff.value; return ( <button key={diff.value} onClick={() => { setLevel(diff.value); playUiSound('select'); }} className={`flex-1 flex flex-col justify-end p-1 rounded transition-all relative overflow-hidden group border ${active ? 'border-white/50' : 'border-transparent'}`}><div className={`absolute inset-0 opacity-20 ${diff.color}`}></div><div className={`w-full transition-all duration-300 ${active ? 'h-full opacity-100' : 'h-1/3 opacity-40 group-hover:h-1/2'} ${diff.color}`}></div><span className={`relative z-10 text-[10px] md:text-xs font-bold text-center mt-1 truncate ${active ? 'text-white' : 'text-slate-500'} ${fontClass}`}>{diff.label}</span></button> ) })}</div></div>
              <div><div className={`text-xs font-bold text-slate-500 mb-2 tracking-widest ${fontClass}`}>{t.KEY_MODE_LABEL || "KEY CONFIGURATION"}</div><div className="flex gap-2 h-10">{[4, 5, 7].map((k) => { const active = keyMode === k; return ( <button key={k} onClick={()=>{setKeyMode(k as any);playUiSound('select')}} className={`flex-1 relative overflow-hidden rounded border transition-all duration-200 flex items-center justify-center ${active ? 'bg-cyan-900/50 border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.3)]' : 'bg-slate-800 border-slate-700 hover:border-cyan-600'}`}><div className={`text-xl font-black italic ${active ? 'text-white' : 'text-slate-500 group-hover:text-cyan-200'}`}>{k}Key</div><div className={`text-[10px] ml-1 font-bold ${active ? 'text-cyan-400' : 'text-slate-600'}`}>MODE</div></button> ); })}</div></div>
              <div><div className={`text-xs font-bold text-slate-500 mb-1 ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="flex items-center bg-black rounded border border-slate-700 p-1"><button onClick={()=>{setSpeedMod(Math.max(1,speedMod-0.5));playUiSound('select')}} className="w-10 h-8 bg-slate-800 text-slate-400 hover:text-white font-bold rounded">-</button><div className="flex-1 text-center font-mono text-cyan-400 font-bold text-lg">{speedMod.toFixed(1)}</div><button onClick={()=>{setSpeedMod(Math.min(10,speedMod+0.5));playUiSound('select')}} className="w-10 h-8 bg-slate-800 text-slate-400 hover:text-white font-bold rounded">+</button></div></div>
-             
-             {/* MODIFIERS SECTION */}
-             <div>
-                <div className={`text-xs font-bold text-slate-500 mb-1 tracking-widest ${fontClass}`}>{t.MODIFIERS}</div>
-                <div className="flex gap-2 h-8">
-                    <button 
-                        onClick={() => { setModifiers(m => ({...m, mirror: !m.mirror})); playUiSound('select'); }} 
-                        className={`flex-1 rounded border text-[10px] font-bold transition-all ${modifiers.mirror ? 'bg-cyan-600 border-cyan-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400'} ${fontClass}`}
-                    >
-                        {t.MOD_MIRROR}
-                    </button>
-                    <button 
-                        onClick={() => { setModifiers(m => ({...m, sudden: !m.sudden, hidden: false})); playUiSound('select'); }} 
-                        className={`flex-1 rounded border text-[10px] font-bold transition-all ${modifiers.sudden ? 'bg-fuchsia-600 border-fuchsia-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400'} ${fontClass}`}
-                    >
-                        {t.MOD_SUDDEN}
-                    </button>
-                    <button 
-                        onClick={() => { setModifiers(m => ({...m, hidden: !m.hidden, sudden: false})); playUiSound('select'); }} 
-                        className={`flex-1 rounded border text-[10px] font-bold transition-all ${modifiers.hidden ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400'} ${fontClass}`}
-                    >
-                        {t.MOD_HIDDEN}
-                    </button>
-                </div>
-             </div>
+             <div><div className={`text-xs font-bold text-slate-500 mb-1 tracking-widest ${fontClass}`}>{t.MODIFIERS}</div><div className="flex gap-2 h-8">
+                    <button onClick={() => { setModifiers(m => ({...m, mirror: !m.mirror})); playUiSound('select'); }} className={`flex-1 rounded border text-[10px] font-bold transition-all ${modifiers.mirror ? 'bg-cyan-600 border-cyan-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400'} ${fontClass}`}>{t.MOD_MIRROR}</button>
+                    <button onClick={() => { setModifiers(m => ({...m, sudden: !m.sudden, hidden: false})); playUiSound('select'); }} className={`flex-1 rounded border text-[10px] font-bold transition-all ${modifiers.sudden ? 'bg-fuchsia-600 border-fuchsia-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400'} ${fontClass}`}>{t.MOD_SUDDEN}</button>
+                    <button onClick={() => { setModifiers(m => ({...m, hidden: !m.hidden, sudden: false})); playUiSound('select'); }} className={`flex-1 rounded border text-[10px] font-bold transition-all ${modifiers.hidden ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-slate-800 border-slate-600 text-slate-500 hover:border-slate-400'} ${fontClass}`}>{t.MOD_HIDDEN}</button>
+                </div></div>
          </div>
          <button ref={mobileSetupStartBtnRef} onClick={startCountdownSequence} disabled={isAnalyzing || !analyzedNotes} onMouseEnter={() => playUiSound('hover')} className={`group relative w-full h-14 flex flex-col items-center justify-center transform transition-all duration-200 active:scale-95 ${(isAnalyzing || !analyzedNotes) ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer'}`}><div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-blue-600 transform -skew-x-2 border-2 border-white/20 shadow-[0_0_30px_rgba(6,182,212,0.5)] group-hover:shadow-[0_0_60px_rgba(6,182,212,0.8)] transition-shadow rounded"></div><div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30 mix-blend-overlay"></div><div className="relative z-10 text-center transform -skew-x-2">{isAnalyzing ? ( <div className="flex items-center gap-4"><div className="text-xl font-black text-white animate-pulse">SYSTEM ANALYZING</div><div className="w-24 h-2 bg-black/50 rounded-full overflow-hidden"><div className="h-full bg-white animate-progress"></div></div></div> ) : ( <><div className={`text-2xl font-black italic text-white tracking-tighter drop-shadow-lg ${fontClass}`}>{t.GAME_START}</div></> )}</div></button>
       </div>
@@ -1692,7 +1709,6 @@ const App: React.FC = () => {
         {currentThemeId === 'ignore' ? ( <div className="absolute bottom-24 left-0 w-full h-1 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.9)] z-20 opacity-80 pointer-events-none"></div> ) : currentThemeId === 'titan' ? ( <div className="absolute bottom-20 left-0 w-full h-[2px] bg-amber-500/80 shadow-[0_0_10px_rgba(245,158,11,0.5)] z-20 pointer-events-none"></div> ) : currentThemeId === 'queen' ? ( <div className="absolute bottom-16 left-0 w-full h-[2px] bg-pink-500 shadow-[0_0_15px_rgba(236,72,153,0.8)] z-20 pointer-events-none"></div> ) : ( <div className="absolute bottom-20 left-0 w-full h-px bg-white/20 pointer-events-none z-20"></div> )}
         {hitEffects.map(effect => { const width = 100 / keyMode; const left = effect.laneIndex * width; return ( <HitEffect key={effect.id} x={`${left}%`} width={`${width}%`} rating={effect.rating} /> ); })}
         
-        {/* RENDER NOTES WITH OVERDRIVE & MODIFIERS PROP */}
         {renderNotes.map((note) => { 
             const config = activeLaneConfig[note.laneIndex]; 
             if (!config) return null; 
@@ -1711,7 +1727,7 @@ const App: React.FC = () => {
         
         <div className="absolute top-[30%] left-0 right-0 flex flex-col items-center pointer-events-none z-50">
             {isAutoPlay && ( <div className={`text-xl ${fontClass} font-bold text-fuchsia-500 animate-pulse mb-2 border border-fuchsia-500 px-2 bg-black/50`}>{t.AUTO_PILOT}</div> )}
-            {isOverdrive && ( <div className={`text-2xl md:text-4xl ${fontClass} font-black italic text-amber-400 animate-pulse mb-2 tracking-widest overdrive-active whitespace-nowrap`} style={{textShadow: '0 0 10px #fbbf24'}}>{t.X2_BONUS}</div> )}
+            {isOverdrive && ( <div className={`text-2xl md:text-4xl ${fontClass} font-black italic text-amber-400 mb-2 tracking-widest whitespace-nowrap`} style={{textShadow: '0 0 10px #fbbf24'}}>{t.X2_BONUS}</div> )}
             <div className="flex flex-col items-center">
                 <div className={`text-sm font-bold text-slate-500/50 tracking-[0.3em] mb-[-10px] ${fontClass}`}>{t.COMBO}</div>
                 <div 
@@ -1727,20 +1743,11 @@ const App: React.FC = () => {
             </div>
             {feedback && ( <div key={feedback.id} className={`mt-8 text-5xl font-black font-display italic ${feedback.color} animate-bounce-short drop-shadow-[0_0_10px_rgba(0,0,0,1)] stroke-black`}>{feedback.text}</div> )}
             
-            {/* NEW HORIZONTAL OVERDRIVE BAR FOR IGNORE THEME (BELOW FEEDBACK) */}
             {currentThemeId === 'ignore' && (
                 <div className="mt-2 w-48 h-6 bg-slate-900/80 border border-slate-500 rounded-full relative overflow-hidden backdrop-blur-sm">
-                     {/* Bar Fill */}
-                     <div 
-                        className={`absolute inset-0 transition-all duration-100 ${isOverdrive ? 'animate-rainbow' : 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]'}`} 
-                        style={{ width: `${overdrive}%` }}
-                     ></div>
-                     
-                     {/* Text Layer - Using Mix Blend Difference for auto-contrast */}
+                     <div className={`absolute inset-0 transition-all duration-100 ${isOverdrive ? 'animate-rainbow' : 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]'}`} style={{ width: `${overdrive}%` }}></div>
                      <div className="absolute inset-0 flex items-center justify-center z-10 mix-blend-difference">
-                         <span className={`text-[10px] md:text-xs font-black italic tracking-[0.2em] ${fontClass} text-white`}>
-                             OVERDRIVE
-                         </span>
+                         <span className={`text-[10px] md:text-xs font-black italic tracking-[0.2em] ${fontClass} text-white`}>OVERDRIVE</span>
                      </div>
                 </div>
             )}
@@ -1749,39 +1756,28 @@ const App: React.FC = () => {
   );
 
   const renderGameFrame = () => {
-    // Determine overdrive visual modifier (Gentle Shake)
-    const frameClass = isOverdrive ? 'border-amber-400 overdrive-border animate-[shake-gentle_0.5s_ease-in-out_infinite]' : '';
+    const frameClass = isOverdrive ? 'border-amber-400 overdrive-border' : '';
 
     if (currentThemeId === 'ignore') {
         return (
             <div className={`relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden border-x-[4px] border-slate-300 bg-slate-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(0,0,0,0.9)] flex flex-col transition-all duration-300 ${frameClass}`}>
                 <div className="relative flex-1 flex w-full">
-                    {/* LEFT SIDE: REMOVED COMPLETELY */}
-                    
                     {renderLanes()}
-                    
-                    {/* RIGHT SIDE: HEALTH (Restored) */}
                     <div className="w-6 bg-slate-900/80 border-l border-slate-700 relative flex flex-col justify-end p-0.5">
                         <div className={`absolute top-2 left-0 w-full text-[10px] text-center font-bold text-slate-500 vertical-text ${fontClass}`}>{t.GROOVE}</div>
                         <div className="w-full bg-slate-800 rounded-sm overflow-hidden h-[80%] relative border border-slate-700">
-                            {/* RAINBOW HEALTH BAR ON OVERDRIVE */}
                             <div className={`absolute bottom-0 left-0 w-full transition-all duration-200 ${isOverdrive ? 'animate-rainbow' : 'bg-gradient-to-t from-red-500 via-yellow-400 to-green-500'}`} style={{ height: `${health}%` }}></div>
                         </div>
                         <div className={`mt-1 w-full h-1 ${health > 90 ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`}></div>
                     </div>
                 </div>
                 <div className="h-16 bg-gradient-to-b from-slate-200 to-slate-400 relative flex items-center justify-between px-4 border-t-4 border-slate-400 shadow-inner pb-[env(safe-area-inset-bottom)]">
-                        {/* Speed Left */}
                         <div className="flex flex-col items-center bg-slate-800/80 p-1 rounded border border-slate-600 shadow-inner scale-75 origin-left">
                             <div className={`text-[8px] text-slate-400 font-bold ${fontClass}`}>{t.SCROLL_SPEED}</div><div className="text-sm font-display text-white">{speedMod.toFixed(2)}</div>
                         </div>
-                        
-                        {/* Center Score (Absolute) - No Rank - ROUNDED LG */}
                         <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center bg-black px-6 py-1 rounded-xl border-2 border-slate-500 shadow-[inset_0_0_10px_rgba(0,0,0,0.8)] z-10">
                             <div className={`text-[8px] text-red-900 font-bold tracking-widest w-full text-center ${fontClass}`}>{t.SCORE}</div><div className="font-mono text-3xl text-red-600 font-bold tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">{score.toString().padStart(7, '0')}</div>
                         </div>
-
-                        {/* Pause Right */}
                         <div className="scale-90 origin-right"><button onClick={(e) => { e.stopPropagation(); togglePause(); playUiSound('select'); }} className="w-10 h-10 flex items-center justify-center bg-slate-300 border border-slate-400 rounded shadow-[0_2px_0_rgba(0,0,0,0.2)] hover:bg-white active:scale-95 transition-all group"><div className="flex flex-col space-y-1"><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div><div className="w-5 h-0.5 bg-slate-500 group-hover:bg-slate-800"></div></div></button></div>
                 </div>
             </div>
@@ -1794,12 +1790,10 @@ const App: React.FC = () => {
                     <div className="flex flex-col">
                         <div className={`text-[10px] text-amber-500 font-bold tracking-widest ${fontClass}`}>{t.SYSTEM_INTEGRITY}</div>
                         <div className="w-32 h-3 bg-slate-950 border border-slate-600 mt-1 flex">
-                            <div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-amber-500'}`} style={{width: `${health}%`}}></div>
-                            {/* OVERDRIVE OVERLAY */}
-                             <div className={`h-full transition-all duration-200 ${isOverdrive ? 'bg-amber-100 animate-pulse' : 'bg-transparent'}`} style={{width: `${overdrive}%`, opacity: 0.5}}></div>
+                            <div className={`h-full transition-all duration-200 ${isOverdrive ? 'animate-rainbow' : (health < 30 ? 'bg-red-500' : 'bg-amber-500')}`} style={{width: `${health}%`}}></div>
+                             <div className={`h-full transition-all duration-200 ${isOverdrive ? 'animate-rainbow' : 'bg-transparent'}`} style={{width: `${overdrive}%`, opacity: 0.5}}></div>
                         </div>
                     </div>
-                    {/* RANK TITAN THEME */}
                     <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2">
                         <div className={`text-3xl font-black italic opacity-50 ${currentRank === 'SSS' ? 'text-amber-100' : 'text-slate-600'}`}>{currentRank}</div>
                     </div>
@@ -1812,7 +1806,7 @@ const App: React.FC = () => {
     } else if (currentThemeId === 'queen') {
         return (
             <div className={`relative h-full md:max-w-lg w-full flex-shrink-0 z-20 overflow-hidden bg-gradient-to-b from-black/50 via-purple-950/40 to-pink-900/40 backdrop-blur-md shadow-[0_0_60px_rgba(236,72,153,0.3)] flex flex-col border-x-4 border-pink-800/50 transition-all ${frameClass}`}>
-                <div className="w-full py-4 px-6 flex justify-between items-center bg-black/40 backdrop-blur-md border-b border-pink-800 pt-[calc(1rem+env(safe-area-inset-top))]"><div className="flex flex-col"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.GRACE}</div><div className="w-32 h-2 bg-purple-950 border border-purple-700 rounded-full mt-1 overflow-hidden relative"><div className={`h-full transition-all duration-200 bg-gradient-to-r from-purple-600 to-pink-500`} style={{width: `${health}%`}}></div><div className={`absolute top-0 left-0 h-full transition-all duration-200 ${isOverdrive ? 'bg-amber-200 mix-blend-overlay animate-pulse' : ''}`} style={{width: `${overdrive}%`}}></div></div></div><div className="flex flex-col items-end"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.POWER}</div><div className="text-3xl font-display font-bold text-pink-100 drop-shadow-[0_0_10px_rgba(236,72,153,0.8)]">{score.toString().padStart(7, '0')}</div></div></div>
+                <div className="w-full py-4 px-6 flex justify-between items-center bg-black/40 backdrop-blur-md border-b border-pink-800 pt-[calc(1rem+env(safe-area-inset-top))]"><div className="flex flex-col"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.GRACE}</div><div className="w-32 h-2 bg-purple-950 border border-purple-700 rounded-full mt-1 overflow-hidden relative"><div className={`h-full transition-all duration-200 ${isOverdrive ? 'animate-rainbow' : 'bg-gradient-to-r from-purple-600 to-pink-500'}`} style={{width: `${health}%`}}></div><div className={`absolute top-0 left-0 h-full transition-all duration-200 ${isOverdrive ? 'animate-rainbow opacity-50' : ''}`} style={{width: `${overdrive}%`}}></div></div></div><div className="flex flex-col items-end"><div className={`text-[10px] text-pink-400 font-serif tracking-widest uppercase ${fontClass}`}>{t.POWER}</div><div className="text-3xl font-display font-bold text-pink-100 drop-shadow-[0_0_10px_rgba(236,72,153,0.8)]">{score.toString().padStart(7, '0')}</div></div></div>
                 <div className="flex-1 relative flex"><div className="w-2 h-full bg-gradient-to-b from-purple-900/50 via-pink-900/50 to-purple-900/50"></div><div className="flex-1 relative bg-black/10"><div className="absolute inset-0 opacity-10" style={{backgroundImage: 'linear-gradient(135deg, #be185d 25%, transparent 25%), linear-gradient(225deg, #be185d 25%, transparent 25%), linear-gradient(45deg, #be185d 25%, transparent 25%), linear-gradient(315deg, #be185d 25%, transparent 25%)', backgroundPosition: '10px 0, 10px 0, 0 0, 0 0', backgroundSize: '20px 20px', backgroundRepeat: 'repeat'}}></div>{renderLanes()}</div><div className="w-2 h-full bg-gradient-to-b from-purple-900/50 via-pink-900/50 to-purple-900/50"></div></div>
                  <div className="h-2 w-full bg-gradient-to-r from-purple-900 via-pink-600 to-purple-900 mb-[env(safe-area-inset-bottom)]"></div>
             </div>
@@ -1824,11 +1818,10 @@ const App: React.FC = () => {
                     <div className="w-1/3">
                         <div className={`text-xs text-cyan-400 font-bold ${fontClass}`}>{t.INTEGRITY}</div>
                         <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-600 mb-1">
-                            <div className={`h-full transition-all duration-200 ${health < 30 ? 'bg-red-500' : 'bg-cyan-500'}`} style={{width: `${health}%`}}></div>
+                            <div className={`h-full transition-all duration-200 ${isOverdrive ? 'animate-rainbow' : (health < 30 ? 'bg-red-500' : 'bg-cyan-500')}`} style={{width: `${health}%`}}></div>
                         </div>
-                         {/* OVERDRIVE BAR SIMPLE */}
                          <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden">
-                            <div className={`h-full transition-all duration-200 ${isOverdrive ? 'bg-amber-300 animate-pulse' : 'bg-amber-600'}`} style={{width: `${overdrive}%`}}></div>
+                            <div className={`h-full transition-all duration-200 ${isOverdrive ? 'animate-rainbow' : 'bg-amber-600'}`} style={{width: `${overdrive}%`}}></div>
                         </div>
                     </div>
                     <div className="w-1/3 text-right">
@@ -1863,14 +1856,9 @@ const App: React.FC = () => {
       <audio ref={bgMusicRef} src="/musicbg.mp3" loop />
 
       <div className={`absolute inset-0 z-0 pointer-events-auto overflow-hidden bg-slate-900`} ref={bgRef} style={{ transition: 'transform 0.05s, filter 0.05s' }}>
-        
-        {/* OPTIMIZED OVERDRIVE EFFECTS: Always present but hidden via opacity to prevent layout thrashing */}
         {status === GameStatus.PLAYING && (
             <div className={`absolute inset-0 z-10 pointer-events-none overflow-hidden transition-opacity duration-200 ${isOverdrive ? 'opacity-100' : 'opacity-0'}`}>
-                {/* 1. White Strobe Flashes - Simplified */}
-                <div className="absolute inset-0 bg-white/5 mix-blend-overlay animate-lightning"></div>
-                
-                {/* REMOVED: SVG Lightning Bolts (Too expensive) */}
+                <div className="absolute inset-0 bg-white/5 mix-blend-overlay"></div>
             </div>
         )}
 
@@ -1878,9 +1866,7 @@ const App: React.FC = () => {
             <div className="absolute inset-0 z-10 pointer-events-none">
                 {layoutSettings.enableMenuBackground ? (
                     <>
-                        <video src="/background.mp4" autoPlay loop muted playsInline 
-                            // @ts-ignore
-                            webkit-playsinline="true" disablePictureInPicture className="absolute inset-0 w-full h-full object-cover pointer-events-none touch-none" />
+                        <video src="/background.mp4" autoPlay loop muted playsInline webkit-playsinline="true" disablePictureInPicture className="absolute inset-0 w-full h-full object-cover pointer-events-none touch-none" />
                         <div className="absolute inset-0 led-screen-filter"></div>
                     </>
                 ) : ( <div className="absolute inset-0 bg-slate-950"></div> )}
@@ -1889,16 +1875,11 @@ const App: React.FC = () => {
         {(status === GameStatus.PLAYING || status === GameStatus.PAUSED || status === GameStatus.RESUMING || status === GameStatus.OUTRO) && (
             <>
                 {mediaType === 'video' ? (
-                    <video ref={mediaRef as React.RefObject<HTMLVideoElement>} src={localVideoSrc} className={`absolute inset-0 w-full h-full object-cover z-20 pointer-events-none touch-none`} onEnded={triggerOutro} playsInline 
-                        // @ts-ignore
-                        webkit-playsinline="true" disablePictureInPicture />
+                    <video ref={mediaRef as React.RefObject<HTMLVideoElement>} src={localVideoSrc} className={`absolute inset-0 w-full h-full object-cover z-20 pointer-events-none touch-none`} onEnded={triggerOutro} playsInline webkit-playsinline="true" disablePictureInPicture />
                 ) : (
                     <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm"><audio ref={mediaRef as React.RefObject<HTMLAudioElement>} src={localVideoSrc} onEnded={triggerOutro} /></div>
                 )}
-                {/* LIGHTWEIGHT OVERDRIVE TINT OVERLAY */}
-                {isOverdrive && (
-                    <div className="absolute inset-0 z-20 bg-amber-500/20 mix-blend-overlay pointer-events-none"></div>
-                )}
+                {isOverdrive && <div className="absolute inset-0 z-20 bg-amber-500/10 mix-blend-overlay pointer-events-none"></div>}
             </>
         )}
       </div>
@@ -1914,7 +1895,6 @@ const App: React.FC = () => {
       {showKeyConfig && ( <KeyConfigMenu currentKeyMode={keyMode} mappings={keyMappings} audioSettings={audioSettings} onAudioSettingsChange={setAudioSettings} layoutSettings={layoutSettings} onLayoutSettingsChange={handleLayoutChange} onSave={saveKeyMappings} onClose={() => setShowKeyConfig(false)} onPlaySound={playUiSound} t={t} fontClass={fontClass} /> )}
       {startCountdown !== null && ( <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"><div className="text-[15rem] font-black font-display text-cyan-400 animate-ping">{startCountdown}</div></div> )}
       
-      {/* RESUME COUNTDOWN OVERLAY */}
       {status === GameStatus.RESUMING && resumeCountdown !== null && (
           <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm">
                <div className="text-4xl text-cyan-400 font-bold mb-4 animate-pulse">RESUMING</div>
@@ -1950,9 +1930,7 @@ const App: React.FC = () => {
              <button onClick={() => { setStatus(GameStatus.TITLE); stopPreview(); }} className="text-white font-bold text-sm flex items-center gap-1">← {t.BACK}</button>
              <div className="flex items-center gap-3">
                 {songList.length > 0 && (
-                     <button onClick={handleClearPlaylist} className={`text-[10px] text-red-400 font-bold border border-red-900/50 px-2 py-1 rounded bg-red-900/10 hover:bg-red-900/30 ${fontClass}`}>
-                        {t.CLEAR_PLAYLIST}
-                     </button>
+                     <button onClick={handleClearPlaylist} className={`text-[10px] text-red-400 font-bold border border-red-900/50 px-2 py-1 rounded bg-red-900/10 hover:bg-red-900/30 ${fontClass}`}>{t.CLEAR_PLAYLIST}</button>
                 )}
                 <div className="text-cyan-400 font-bold text-sm hidden sm:block">MUSIC SELECT</div>
             </div>
@@ -1961,9 +1939,7 @@ const App: React.FC = () => {
              <div className="hidden md:flex h-24 items-end justify-between pb-4 px-8 border-b border-cyan-500/30 bg-gradient-to-b from-slate-900 to-transparent shrink-0">
                 <h2 className={`text-4xl font-black italic text-white tracking-tighter ${fontClass} drop-shadow-md`}>SELECT <span className="text-cyan-400">MUSIC</span></h2>
                 {songList.length > 0 && (
-                    <button onClick={handleClearPlaylist} className={`text-xs font-bold text-red-500 hover:text-red-300 transition-colors tracking-widest border border-red-900/50 hover:border-red-500 px-3 py-1 rounded uppercase bg-slate-900/50 ${fontClass}`}>
-                        {t.CLEAR_PLAYLIST}
-                    </button>
+                    <button onClick={handleClearPlaylist} className={`text-xs font-bold text-red-500 hover:text-red-300 transition-colors tracking-widest border border-red-900/50 hover:border-red-500 px-3 py-1 rounded uppercase bg-slate-900/50 ${fontClass}`}>{t.CLEAR_PLAYLIST}</button>
                 )}
              </div>
              <div className="w-full flex-1 overflow-y-auto custom-scrollbar p-0 space-y-1 pb-48 md:pb-0">
@@ -1976,7 +1952,6 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_01} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_01" ? 'text-white' : 'text-slate-400 group-hover:text-green-200'}`} /><div className="text-xs font-mono text-green-600/70">HIGH SPEED ROCK // 175 BPM</div></div>{localFileName === "DEMO_TRACK_01" && <div className="text-green-400 text-xl animate-pulse">◀</div>}
                  </div>
-                 
                  <div onClick={(e) => { loadDemoTrack('/demoplay02.mp4', 'DEMO_TRACK_02'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_02" ? 'bg-gradient-to-r from-amber-900/80 to-transparent border-amber-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-amber-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
                     <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_02" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
                         <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
@@ -1985,7 +1960,6 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_02} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_02" ? 'text-white' : 'text-slate-400 group-hover:text-amber-200'}`} /><div className="text-xs font-mono text-amber-600/70">ALTERNATIVE MIX // 140 BPM</div></div>{localFileName === "DEMO_TRACK_02" && <div className="text-amber-400 text-xl animate-pulse">◀</div>}
                  </div>
-
                  <div onClick={(e) => { loadDemoTrack('/demoplay03.mp4', 'DEMO_TRACK_03'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_03" ? 'bg-gradient-to-r from-purple-900/80 to-transparent border-purple-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-purple-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
                     <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_03" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
                         <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
@@ -1994,7 +1968,6 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_03} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_03" ? 'text-white' : 'text-slate-400 group-hover:text-purple-200'}`} /><div className="text-xs font-mono text-purple-600/70">ELECTRONIC CORE // 150 BPM</div></div>{localFileName === "DEMO_TRACK_03" && <div className="text-purple-400 text-xl animate-pulse">◀</div>}
                  </div>
-
                  <div onClick={(e) => { loadDemoTrack('/demoplay04.mp4', 'DEMO_TRACK_04'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_04" ? 'bg-gradient-to-r from-rose-900/80 to-transparent border-rose-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-rose-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
                     <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_04" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
                         <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
@@ -2003,7 +1976,6 @@ const App: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_04} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_04" ? 'text-white' : 'text-slate-400 group-hover:text-rose-200'}`} /><div className="text-xs font-mono text-rose-600/70">CYBER PUNK ROCK // 160 BPM</div></div>{localFileName === "DEMO_TRACK_04" && <div className="text-rose-400 text-xl animate-pulse">◀</div>}
                  </div>
-                 
                  {songList.map((song, idx) => {
                      const isActive = localFileName === song.name;
                      return (
@@ -2012,62 +1984,32 @@ const App: React.FC = () => {
                                 {song.thumbnailUrl ? (
                                     <img src={song.thumbnailUrl} className="w-full h-full object-cover" alt="Cover" />
                                 ) : (
-                                    <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
-                                        <div className="text-[8px] font-bold text-slate-400 text-center leading-none rotate-45">DJ<br/>BIG</div>
-                                    </div>
+                                    <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center"><div className="text-[8px] font-bold text-slate-400 text-center leading-none rotate-45">DJ<br/>BIG</div></div>
                                 )}
                                 <div className="absolute w-3 h-3 bg-slate-900 rounded-full border border-slate-600 z-10"></div>
                             </div>
                             <div className="flex-1 min-w-0 overflow-hidden"><MarqueeText text={song.name} className={`text-lg font-bold ${fontClass} ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-cyan-200'}`} /><div className="text-xs font-mono text-slate-600 group-hover:text-cyan-600/70 uppercase">{song.type.toUpperCase()} FILE</div></div>
-                            <button 
-                                onClick={(e) => handleDeleteSong(e, song.id)}
-                                className="ml-2 w-8 h-8 flex items-center justify-center text-slate-500 hover:text-red-500 bg-slate-800 hover:bg-red-900/30 rounded border border-slate-700 hover:border-red-500 transition-colors z-20 group-hover:opacity-100"
-                                title="Delete"
-                            >
-                                ✕
-                            </button>
+                            <button onClick={(e) => handleDeleteSong(e, song.id)} className="ml-2 w-8 h-8 flex items-center justify-center text-slate-500 hover:text-red-500 bg-slate-800 hover:bg-red-900/30 rounded border border-slate-700 hover:border-red-500 transition-colors z-20 group-hover:opacity-100" title="Delete">✕</button>
                         </div>
                      );
                  })}
              </div>
-
-             {/* MOBILE FIXED BOTTOM BAR (STICKY) */}
              {isMobile && !showMobileSetup && (
                 <div className="fixed bottom-0 left-0 w-full z-50 bg-slate-950/95 border-t border-slate-700 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
-                    {/* Floating Play Button (Integrated into bottom area) */}
                     {currentSongMetadata && (
                         <div className="px-4 pt-2 pb-2">
-                            <button 
-                                onClick={() => { 
-                                    playUiSound('select'); 
-                                    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-                                        try { navigator.vibrate(50); } catch(e) {}
-                                    }
-                                    setShowMobileSetup(true); 
-                                }}
-                                className="w-full h-14 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.6)] flex items-center justify-center border-2 border-white/20 animate-bounce-short hover:scale-105 transition-transform"
-                            >
+                            <button onClick={() => { playUiSound('select'); if (typeof navigator !== 'undefined' && navigator.vibrate) { try { navigator.vibrate(50); } catch(e) {} } setShowMobileSetup(true); }} className="w-full h-14 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.6)] flex items-center justify-center border-2 border-white/20 animate-bounce-short hover:scale-105 transition-transform">
                                 <span className={`text-xl font-black italic text-white mr-2 ${fontClass}`}>PLAY</span>
                                 <span className="text-white/80 font-mono text-xs truncate max-w-[200px]">{currentSongMetadata.name}</span>
                             </button>
                         </div>
                     )}
-
-                    {/* Footer Buttons */}
                     <div className="flex gap-2 p-2 pt-0">
-                        <label className="flex-1 h-10 bg-slate-800 hover:bg-cyan-900/50 border border-slate-600 hover:border-cyan-500 rounded flex items-center justify-center cursor-pointer transition-colors group">
-                            <span className={`text-[10px] font-bold text-slate-400 group-hover:text-cyan-400 ${fontClass}`}>+ {t.LOAD_SINGLE}</span>
-                            <input type="file" accept="video/*,audio/*" onChange={handleSingleFileUpload} className="hidden" />
-                        </label>
-                        <label className="flex-1 h-10 bg-slate-800 hover:bg-fuchsia-900/50 border border-slate-600 hover:border-fuchsia-500 rounded flex items-center justify-center cursor-pointer transition-colors group">
-                            <span className={`text-[10px] font-bold text-slate-400 group-hover:text-fuchsia-400 ${fontClass}`}>+ {t.ADD_MULTIPLE}</span>
-                            <input type="file" multiple onChange={handleFolderSelect} className="hidden" />
-                        </label>
+                        <label className="flex-1 h-10 bg-slate-800 hover:bg-cyan-900/50 border border-slate-600 hover:border-cyan-500 rounded flex items-center justify-center cursor-pointer transition-colors group"><span className={`text-[10px] font-bold text-slate-400 group-hover:text-cyan-400 ${fontClass}`}>+ {t.LOAD_SINGLE}</span><input type="file" accept="video/*,audio/*" onChange={handleSingleFileUpload} className="hidden" /></label>
+                        <label className="flex-1 h-10 bg-slate-800 hover:bg-fuchsia-900/50 border border-slate-600 hover:border-fuchsia-500 rounded flex items-center justify-center cursor-pointer transition-colors group"><span className={`text-[10px] font-bold text-slate-400 group-hover:text-fuchsia-400 ${fontClass}`}>+ {t.ADD_MULTIPLE}</span><input type="file" multiple onChange={handleFolderSelect} className="hidden" /></label>
                     </div>
                 </div>
              )}
-             
-             {/* FOOTER BUTTONS (DESKTOP ONLY) */}
              {!isMobile && (
                 <div className="bg-black/80 p-4 border-t border-slate-700 flex gap-2 shrink-0 z-40 relative pb-[calc(1rem+env(safe-area-inset-bottom))]">
                     <label className="flex-1 h-12 bg-slate-800 hover:bg-cyan-900/50 border border-slate-600 hover:border-cyan-500 rounded flex items-center justify-center cursor-pointer transition-colors group"><span className={`text-xs font-bold text-slate-400 group-hover:text-cyan-400 ${fontClass}`}>+ {t.LOAD_SINGLE}</span><input type="file" accept="video/*,audio/*" onChange={handleSingleFileUpload} className="hidden" /></label>
@@ -2075,8 +2017,6 @@ const App: React.FC = () => {
                 </div>
              )}
           </div>
-          
-          {/* Right Column (Desktop) */}
           {!isMobile && (
             <div className="w-full md:w-[45%] h-auto md:h-full relative flex flex-col p-4 md:p-6 justify-between shrink-0 md:overflow-hidden pb-32 md:pb-6">
                  <div className="hidden md:flex w-full justify-between items-start mb-4 z-20 shrink-0"><button onClick={() => { setStatus(GameStatus.TITLE); playUiSound('select'); stopPreview(); }} className="flex items-center space-x-2 text-slate-500 hover:text-white transition-colors group"><div className="w-8 h-8 rounded-full border border-slate-600 group-hover:border-white flex items-center justify-center">←</div><span className={`font-bold tracking-widest ${fontClass}`}>{t.BACK}</span></button><div className="flex space-x-4"><button onClick={() => { setShowKeyConfig(true); playUiSound('select'); }} className="text-slate-500 hover:text-yellow-400 font-bold text-sm tracking-widest">{t.SETTING}</button></div></div>
@@ -2090,36 +2030,26 @@ const App: React.FC = () => {
                  </div>
             </div>
           )}
-          
-          {/* MOBILE POPUP SETUP MODAL */}
           {showMobileSetup && isMobile && (
               <div className="fixed inset-0 z-[60] bg-slate-950/95 backdrop-blur-xl flex flex-col p-6 animate-fade-in overflow-y-auto pb-[env(safe-area-inset-bottom)]">
                   <button onClick={() => setShowMobileSetup(false)} className="absolute top-4 right-4 text-white p-2 z-50 bg-black/50 rounded-full border border-slate-600 mt-[env(safe-area-inset-top)] mr-[env(safe-area-inset-right)]">✕</button>
-                  
                   <div className="flex flex-col items-center mb-6 mt-8 pt-[env(safe-area-inset-top)]">
                        <div className="w-32 h-32 rounded-full border-4 border-cyan-500/50 overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.4)] mb-4 animate-[spin_20s_linear_infinite]">
-                           {currentSongMetadata?.thumbnailUrl ? (
-                               <img src={currentSongMetadata.thumbnailUrl} className="w-full h-full object-cover" alt="Cover" />
-                           ) : (
-                               <div className="w-full h-full bg-slate-800 flex items-center justify-center"><span className="text-cyan-500 font-bold">DJBIG</span></div>
-                           )}
+                           {currentSongMetadata?.thumbnailUrl ? ( <img src={currentSongMetadata.thumbnailUrl} className="w-full h-full object-cover" alt="Cover" /> ) : ( <div className="w-full h-full bg-slate-800 flex items-center justify-center"><span className="text-cyan-500 font-bold">DJBIG</span></div> )}
                        </div>
                        <h2 className={`text-2xl font-black italic text-white text-center leading-none ${fontClass}`}>{currentSongMetadata?.name}</h2>
                        <div className="text-cyan-400 text-xs font-mono mt-1">SETUP CONFIGURATION</div>
                   </div>
-
                   <div className="flex-1 w-full max-w-md mx-auto">
                       <SettingsPanelContent />
                   </div>
               </div>
           )}
-
         </div>
       )}
 
       {(status === GameStatus.PLAYING || status === GameStatus.PAUSED || status === GameStatus.RESUMING) && ( 
           <>
-            {/* NEW: TOP CENTER SCORE (Smaller & Higher) */}
             <div className="absolute top-1 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center pointer-events-none pt-[env(safe-area-inset-top)]">
                  <div className="bg-black/60 backdrop-blur px-4 py-1 border-b border-cyan-500 shadow-[0_2px_8px_rgba(6,182,212,0.3)] rounded-b-md flex flex-col items-center">
                       <div className={`text-[8px] text-cyan-400 font-bold tracking-[0.3em] mb-0.5 ${fontClass}`}>{t.SCORE}</div>
@@ -2128,29 +2058,13 @@ const App: React.FC = () => {
                       </div>
                  </div>
             </div>
-
             <div className={`absolute bottom-8 z-30 hidden md:flex flex-col pointer-events-none transition-all duration-500 ${layoutSettings.lanePosition === 'right' ? 'left-8 items-start' : 'right-8 items-end'}`}>
-                <div className="text-[5rem] font-black font-display italic tracking-tighter leading-none select-none mb-[-1rem] transform -skew-x-12 opacity-80"
-                     style={{
-                         backgroundImage: 'linear-gradient(to bottom, #22d3ee 0%, #3b82f6 50%, #9333ea 100%)',
-                         WebkitBackgroundClip: 'text',
-                         WebkitTextFillColor: 'transparent',
-                         filter: 'drop-shadow(0 4px 0px rgba(0,0,0,0.5))'
-                     }}>
-                    IGNORE <span className="text-white" style={{ WebkitTextFillColor: 'white' }}>PROTOCOL</span>
-                </div>
+                <div className="text-[5rem] font-black font-display italic tracking-tighter leading-none select-none mb-[-1rem] transform -skew-x-12 opacity-80" style={{ backgroundImage: 'linear-gradient(to bottom, #22d3ee 0%, #3b82f6 50%, #9333ea 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 4px 0px rgba(0,0,0,0.5))' }}>IGNORE <span className="text-white" style={{ WebkitTextFillColor: 'white' }}>PROTOCOL</span></div>
                 <div className={`flex flex-col relative w-64 ${layoutSettings.lanePosition === 'right' ? 'items-start' : 'items-end'}`}>
-                    <MarqueeText 
-                        text={currentSongMetadata?.name?.replace(/\.[^/.]+$/, "") || "UNKNOWN TRACK"} 
-                        className={`text-3xl font-black italic text-white tracking-tighter drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)] uppercase ${fontClass}`}
-                    />
-                    <div className="flex gap-2 mt-1">
-                        <span className="px-2 py-0.5 bg-black/60 border border-white/20 text-[10px] font-mono text-cyan-400 rounded">LV.{level}</span>
-                        <span className="px-2 py-0.5 bg-black/60 border border-white/20 text-[10px] font-mono text-fuchsia-400 rounded">{keyMode}Key</span>
-                    </div>
+                    <MarqueeText text={currentSongMetadata?.name?.replace(/\.[^/.]+$/, "") || "UNKNOWN TRACK"} className={`text-3xl font-black italic text-white tracking-tighter drop-shadow0_2px_10px_rgba(0,0,0,0.8)] uppercase ${fontClass}`} />
+                    <div className="flex gap-2 mt-1"><span className="px-2 py-0.5 bg-black/60 border border-white/20 text-[10px] font-mono text-cyan-400 rounded">LV.{level}</span><span className="px-2 py-0.5 bg-black/60 border border-white/20 text-[10px] font-mono text-fuchsia-400 rounded">{keyMode}Key</span></div>
                 </div>
             </div>
-
             <div className={`absolute inset-0 z-40 flex items-center ${getPositionClass()}`}>{renderGameFrame()}</div>
           </> 
       )}

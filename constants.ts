@@ -1,4 +1,5 @@
 
+
 import { LaneConfig, KeyMapping, Theme } from './types';
 
 export const BASE_FALL_SPEED_MS = 1500; 
@@ -6,6 +7,7 @@ export const HIT_WINDOW_PERFECT = 45;
 export const HIT_WINDOW_GOOD = 90;
 export const HIT_WINDOW_MISS = 130;
 export const SONG_DURATION_MS = 305000;
+export const HOLD_TICK_SCORE = 20; // Score per frame while holding
 
 // Color Definitions (Tailwind classes)
 const COLOR_CYAN = {
