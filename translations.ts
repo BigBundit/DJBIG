@@ -1,5 +1,4 @@
 
-
 export const TRANSLATIONS = {
     en: {
         // Title & Menu
@@ -23,6 +22,7 @@ export const TRANSLATIONS = {
         LOAD_FOLDER: "LOAD FOLDER",
         ADD_MULTIPLE: "ADD MULTIPLE FILES",
         PLAY_DEMO: "PLAY DEMO TRACK",
+        PLAY_DEMO_00: "PLAY DEMO 00",
         PLAY_DEMO_01: "PLAY DEMO 01",
         PLAY_DEMO_02: "PLAY DEMO 02",
         PLAY_DEMO_03: "PLAY DEMO 03",
@@ -134,6 +134,7 @@ export const TRANSLATIONS = {
         LOAD_FOLDER: "โหลดโฟลเดอร์",
         ADD_MULTIPLE: "เพิ่มทีละหลายๆไฟล์",
         PLAY_DEMO: "เล่นเพลงตัวอย่าง",
+        PLAY_DEMO_00: "เพลงตัวอย่าง 00",
         PLAY_DEMO_01: "เพลงตัวอย่าง 01",
         PLAY_DEMO_02: "เพลงตัวอย่าง 02",
         PLAY_DEMO_03: "เพลงตัวอย่าง 03",

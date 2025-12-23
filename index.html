@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -110,8 +111,8 @@
       }
       
       @keyframes bounce-short {
-        0%, 100% { transform: translateY(0); opacity: 0; }
-        50% { transform: translateY(-20px); opacity: 1; }
+        0%, 100% { transform: translateY(0); opacity: 1; }
+        50% { transform: translateY(-10px); opacity: 1; }
       }
 
       /* Hit Effect Explosions */
@@ -155,7 +156,7 @@
         50% { transform: translate(1px, 1px); }
       }
 
-      /* RAINBOW STROBE FOR OVERDRIVE BAR (OPTIMIZED: NO BOX SHADOW) */
+      /* RAINBOW STROBE FOR OVERDRIVE BAR */
       @keyframes rainbow-bg {
         0% { background-color: #ef4444; }
         20% { background-color: #eab308; }
@@ -166,6 +167,19 @@
       }
       .animate-rainbow {
         animation: rainbow-bg 0.5s linear infinite;
+      }
+
+      /* RAINBOW TEXT FOR OVERDRIVE LABEL */
+      @keyframes rainbow-text {
+        0% { color: #ef4444; }
+        20% { color: #eab308; }
+        40% { color: #22c55e; }
+        60% { color: #06b6d4; }
+        80% { color: #a855f7; }
+        100% { color: #ef4444; }
+      }
+      .animate-rainbow-text {
+        animation: rainbow-text 0.5s linear infinite;
       }
 
       /* BRIGHTNESS PULSE FOR OVERDRIVE (FIXES "FAINT" NOTES) */

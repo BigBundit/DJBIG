@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { StatusBar } from '@capacitor/status-bar';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -367,11 +368,6 @@ const App: React.FC = () => {
             setResumeCountdown(null);
             
             // Re-calc timing offset
-            // We just spent 2 seconds counting down (plus rewound media).
-            // Current wall clock is 'now'.
-            // Media is at 'media.currentTime' (which we rewound).
-            // We need startTimeRef to match: now - (media.currentTime * 1000 + OFFSET)
-            
             const now = performance.now();
             let mediaTimeMs = 0;
             if (mediaRef.current) {
@@ -803,6 +799,7 @@ const App: React.FC = () => {
     setAnalyzedNotes(null);
     
     let demoTitle = t.PLAY_DEMO_01;
+    if (id === 'DEMO_TRACK_00') demoTitle = t.PLAY_DEMO_00;
     if (id === 'DEMO_TRACK_02') demoTitle = t.PLAY_DEMO_02;
     if (id === 'DEMO_TRACK_03') demoTitle = t.PLAY_DEMO_03;
     if (id === 'DEMO_TRACK_04') demoTitle = t.PLAY_DEMO_04;
@@ -1439,10 +1436,12 @@ const App: React.FC = () => {
         elapsed = timeSinceStart;
         if (mediaRef.current && !mediaRef.current.paused) mediaRef.current.pause(); 
     } else {
-        if (mediaType === 'video' && mediaRef.current) {
+        if (mediaRef.current) {
+             // COMMAND TO PLAY BOTH VIDEO AND AUDIO AFTER OFFSET
              if (mediaRef.current.paused && !mediaRef.current.ended) {
                  mediaRef.current.play().catch(() => {});
              }
+             // For sync, we rely on the media element's clock
              elapsed = mediaRef.current.currentTime * 1000 + START_OFFSET_MS;
         } else {
              elapsed = timeSinceStart;
@@ -1548,7 +1547,7 @@ const App: React.FC = () => {
     
     setHitEffects(prev => prev.filter(e => Date.now() - e.id < 500));
     frameRef.current = requestAnimationFrame(update);
-  }, [health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile, t, mediaType, triggerHaptic, isOverdrive, overdrive]);
+  }, [health, speedMod, isAutoPlay, combo, maxCombo, triggerOutro, soundProfile, t, triggerHaptic, isOverdrive, overdrive]);
 
   useEffect(() => {
     if (status === GameStatus.PLAYING) {
@@ -1725,9 +1724,18 @@ const App: React.FC = () => {
             ); 
         })}
         
-        <div className="absolute top-[30%] left-0 right-0 flex flex-col items-center pointer-events-none z-50">
-            {isAutoPlay && ( <div className={`text-xl ${fontClass} font-bold text-fuchsia-500 animate-pulse mb-2 border border-fuchsia-500 px-2 bg-black/50`}>{t.AUTO_PILOT}</div> )}
-            {isOverdrive && ( <div className={`text-2xl md:text-4xl ${fontClass} font-black italic text-amber-400 mb-2 tracking-widest whitespace-nowrap`} style={{textShadow: '0 0 10px #fbbf24'}}>{t.X2_BONUS}</div> )}
+        <div className="absolute top-[25%] left-0 right-0 flex flex-col items-center pointer-events-none z-50">
+            {/* HUD Status Stack (Above Combo) */}
+            <div className="flex flex-col items-center mb-1">
+                {isAutoPlay && ( <div className={`text-xl ${fontClass} font-bold text-fuchsia-500 animate-pulse mb-1 border border-fuchsia-500 px-2 bg-black/50 whitespace-nowrap`}>{t.AUTO_PILOT}</div> )}
+                {isOverdrive && (
+                    <div className="flex flex-col items-center">
+                        <div className={`text-2xl md:text-3xl ${fontClass} font-black italic text-amber-500 drop-shadow-[0_0_8px_rgba(0,0,0,1)] whitespace-nowrap animate-rainbow-text`}>{t.LIMIT_BREAK}</div>
+                        <div className={`text-3xl md:text-5xl ${fontClass} font-black italic text-amber-400 tracking-widest whitespace-nowrap`} style={{textShadow: '0 0 10px #fbbf24'}}>{t.X2_BONUS}</div>
+                    </div>
+                )}
+            </div>
+
             <div className="flex flex-col items-center">
                 <div className={`text-sm font-bold text-slate-500/50 tracking-[0.3em] mb-[-10px] ${fontClass}`}>{t.COMBO}</div>
                 <div 
@@ -1741,10 +1749,12 @@ const App: React.FC = () => {
                     {combo}
                 </div>
             </div>
-            {feedback && ( <div key={feedback.id} className={`mt-8 text-5xl font-black font-display italic ${feedback.color} animate-bounce-short drop-shadow-[0_0_10px_rgba(0,0,0,1)] stroke-black`}>{feedback.text}</div> )}
+            
+            {/* Feedback stack below combo */}
+            {feedback && ( <div key={feedback.id} className={`mt-4 text-5xl font-black font-display italic ${feedback.color} animate-bounce-short drop-shadow-[0_0_10px_rgba(0,0,0,1)] stroke-black whitespace-nowrap`}>{feedback.text}</div> )}
             
             {currentThemeId === 'ignore' && (
-                <div className="mt-2 w-48 h-6 bg-slate-900/80 border border-slate-500 rounded-full relative overflow-hidden backdrop-blur-sm">
+                <div className="mt-4 w-48 h-6 bg-slate-900/80 border border-slate-500 rounded-full relative overflow-hidden backdrop-blur-sm">
                      <div className={`absolute inset-0 transition-all duration-100 ${isOverdrive ? 'animate-rainbow' : 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]'}`} style={{ width: `${overdrive}%` }}></div>
                      <div className="absolute inset-0 flex items-center justify-center z-10 mix-blend-difference">
                          <span className={`text-[10px] md:text-xs font-black italic tracking-[0.2em] ${fontClass} text-white`}>OVERDRIVE</span>
@@ -1877,7 +1887,14 @@ const App: React.FC = () => {
                 {mediaType === 'video' ? (
                     <video ref={mediaRef as React.RefObject<HTMLVideoElement>} src={localVideoSrc} className={`absolute inset-0 w-full h-full object-cover z-20 pointer-events-none touch-none`} onEnded={triggerOutro} playsInline webkit-playsinline="true" disablePictureInPicture />
                 ) : (
-                    <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm"><audio ref={mediaRef as React.RefObject<HTMLAudioElement>} src={localVideoSrc} onEnded={triggerOutro} /></div>
+                    <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm">
+                        <audio ref={mediaRef as React.RefObject<HTMLAudioElement>} src={localVideoSrc} onEnded={triggerOutro} />
+                        {/* Visualizer/Background for Audio Mode */}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-[300px] h-[300px] border-4 border-cyan-500/20 rounded-full animate-[spin_10s_linear_infinite]"></div>
+                            <div className="absolute w-[200px] h-[200px] border-2 border-fuchsia-500/20 rounded-full animate-[spin-ccw_15s_linear_infinite]"></div>
+                        </div>
+                    </div>
                 )}
                 {isOverdrive && <div className="absolute inset-0 z-20 bg-amber-500/10 mix-blend-overlay pointer-events-none"></div>}
             </>
@@ -1944,6 +1961,14 @@ const App: React.FC = () => {
              </div>
              <div className="w-full flex-1 overflow-y-auto custom-scrollbar p-0 space-y-1 pb-48 md:pb-0">
                  {/* Demo Tracks */}
+                 <div onClick={(e) => { loadDemoTrack('/demoplay00.mp4', 'DEMO_TRACK_00'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_00" ? 'bg-gradient-to-r from-cyan-900/80 to-transparent border-cyan-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-cyan-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
+                    <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_00" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
+                        <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
+                        <div className={`w-full h-full bg-gradient-to-tr from-cyan-500 to-blue-700 opacity-80`}></div>
+                        <span className="absolute text-[8px] font-black text-black/50 z-0 rotate-45">DJBIG</span>
+                    </div>
+                    <div className="flex-1 min-w-0"><MarqueeText text={t.PLAY_DEMO_00} className={`text-lg font-bold ${fontClass} ${localFileName === "DEMO_TRACK_00" ? 'text-white' : 'text-slate-400 group-hover:text-cyan-200'}`} /><div className="text-xs font-mono text-cyan-600/70">PROTOTYPE MIX // 130 BPM</div></div>{localFileName === "DEMO_TRACK_00" && <div className="text-cyan-400 text-xl animate-pulse">◀</div>}
+                 </div>
                  <div onClick={(e) => { loadDemoTrack('/demoplay.mp4', 'DEMO_TRACK_01'); e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); }} onMouseEnter={() => playUiSound('hover')} className={`group relative h-20 w-full flex items-center px-6 cursor-pointer transition-all border-l-8 overflow-hidden ${localFileName === "DEMO_TRACK_01" ? 'bg-gradient-to-r from-green-900/80 to-transparent border-green-400' : 'bg-slate-900/50 border-slate-800 hover:bg-slate-800 hover:border-green-600'}`} style={{ clipPath: 'polygon(0 0, 100% 0, 95% 100%, 0% 100%)' }}>
                     <div className={`mr-4 w-12 h-12 rounded-full flex items-center justify-center border-4 ${localFileName === "DEMO_TRACK_01" ? 'border-white animate-spin-slow' : 'border-slate-600'} bg-black overflow-hidden shadow-lg shrink-0`}>
                         <div className="w-4 h-4 bg-slate-900 rounded-full absolute z-10 border border-slate-600"></div>
