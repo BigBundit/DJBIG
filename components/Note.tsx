@@ -1,3 +1,4 @@
+
 import React, { memo } from 'react';
 import { Note as NoteType, LaneColor, Theme, GameModifiers } from '../types';
 
@@ -8,12 +9,14 @@ interface NoteProps {
     theme: Theme;
     isOverdrive?: boolean;
     modifiers?: GameModifiers;
+    graphicsQuality: 'low' | 'high';
 }
 
-export const Note: React.FC<NoteProps> = memo(({ note, totalLanes, color, theme, isOverdrive, modifiers }) => {
+export const Note: React.FC<NoteProps> = memo(({ note, totalLanes, color, theme, isOverdrive, modifiers, graphicsQuality }) => {
+    const isLow = graphicsQuality === 'low';
     const widthPerc = 100 / totalLanes;
     const leftPos = `${note.laneIndex * widthPerc}%`;
-    const showHighlight = theme.noteShape === 'rect' || theme.noteShape === 'square';
+    const showHighlight = !isLow && (theme.noteShape === 'rect' || theme.noteShape === 'square');
     
     let opacity = 1;
     if (modifiers) {
@@ -27,8 +30,7 @@ export const Note: React.FC<NoteProps> = memo(({ note, totalLanes, color, theme,
         }
     }
 
-    // Fixed: Always use standard lane colors even in Overdrive to reduce lag and improve visibility
-    const colorClass = `${color.bg} ${color.noteShadow}`;
+    const colorClass = `${color.bg} ${!isLow ? color.noteShadow : ''}`;
     let shapeClass = '';
     let innerContent = null;
 
@@ -46,7 +48,7 @@ export const Note: React.FC<NoteProps> = memo(({ note, totalLanes, color, theme,
             shapeClass = `${colorClass}`;
             break;
         case 'star':
-            shapeClass = `flex items-center justify-center text-2xl ${color.text} drop-shadow-md`;
+            shapeClass = `flex items-center justify-center text-2xl ${color.text} ${!isLow ? 'drop-shadow-md' : ''}`;
             innerContent = '★';
             break;
         default: 
@@ -69,21 +71,21 @@ export const Note: React.FC<NoteProps> = memo(({ note, totalLanes, color, theme,
             flexDirection: 'column'
         };
         
-        // Fixed: Use standard lane colors for hold notes in Overdrive
         const barColor = `bg-${color.base}-600`;
         const borderColor = `border-${color.base}-400`;
         
         return (
             <div style={holdContainerStyle} className="pointer-events-none">
-                <div className={`w-full h-full ${barColor} border-x-2 ${borderColor} rounded-sm relative overflow-hidden flex flex-col shadow-md`}>
+                <div className={`w-full h-full ${barColor} border-x-2 ${borderColor} rounded-sm relative overflow-hidden flex flex-col ${!isLow ? 'shadow-md' : ''}`}>
                     <div className={`w-full h-[4px] bg-${color.base}-400`}></div>
                     <div className="flex-1 w-full relative">
-                        {note.holding && <div className={`absolute inset-0 bg-white/40 animate-pulse`}></div>}
+                        {note.holding && !isLow && <div className={`absolute inset-0 bg-white/40 animate-pulse`}></div>}
+                        {note.holding && isLow && <div className={`absolute inset-0 bg-white/20`}></div>}
                         <div className={`absolute left-1/2 top-0 bottom-0 w-[2px] bg-${color.base}-400/50 -translate-x-1/2`}></div>
                     </div>
                     <div className={`w-full h-[4px] bg-${color.base}-400`}></div>
                 </div>
-                {note.holding && <div className={`absolute bottom-0 left-0 right-0 h-16 bg-${color.base}-400/60 blur-xl`}></div>}
+                {note.holding && !isLow && <div className={`absolute bottom-0 left-0 right-0 h-16 bg-${color.base}-400/60 blur-xl`}></div>}
             </div>
         );
     }
@@ -107,8 +109,7 @@ export const Note: React.FC<NoteProps> = memo(({ note, totalLanes, color, theme,
     }
 
     const getNoteExtraStyles = () => {
-        // Fixed: Removed white drop shadow from arrow notes in Overdrive
-        if (theme.noteShape === 'arrow') return { clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)', filter: `drop-shadow(0 0 10px ${color.base})` };
+        if (theme.noteShape === 'arrow') return { clipPath: 'polygon(0% 0%, 100% 0%, 50% 100%)', filter: isLow ? '' : `drop-shadow(0 0 10px ${color.base})` };
         if (theme.noteShape === 'hex') return { clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)' };
         return {};
     };

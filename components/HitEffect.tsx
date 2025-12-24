@@ -6,12 +6,15 @@ interface HitEffectProps {
     x: string;
     width: string;
     rating: ScoreRating;
+    graphicsQuality: 'low' | 'high';
 }
 
-export const HitEffect: React.FC<HitEffectProps> = memo(({ x, width, rating }) => {
+export const HitEffect: React.FC<HitEffectProps> = memo(({ x, width, rating, graphicsQuality }) => {
     const [visible, setVisible] = useState(true);
+    const isLow = graphicsQuality === 'low';
 
     const sparks = useMemo(() => {
+        if (isLow) return []; // No sparks in low quality
         return Array.from({ length: 6 }).map((_, i) => {
             const angle = (Math.random() * 360) * (Math.PI / 180);
             const dist = 40 + Math.random() * 60; 
@@ -21,12 +24,13 @@ export const HitEffect: React.FC<HitEffectProps> = memo(({ x, width, rating }) =
             const delay = Math.random() * 0.05;
             return { id: i, tx, ty, size, delay };
         });
-    }, []);
+    }, [isLow]);
 
     useEffect(() => {
-        const timer = setTimeout(() => setVisible(false), 300);
+        const duration = isLow ? 150 : 300;
+        const timer = setTimeout(() => setVisible(false), duration);
         return () => clearTimeout(timer);
-    }, []);
+    }, [isLow]);
 
     if (!visible) return null;
 
@@ -49,10 +53,10 @@ export const HitEffect: React.FC<HitEffectProps> = memo(({ x, width, rating }) =
             className="absolute bottom-[8%] z-50 pointer-events-none flex justify-center items-center"
             style={{ left: x, width: width, height: '10%' }}
         >
-            <div className={`absolute w-full pt-[100%] rounded-full border-white/50 opacity-0 animate-[explosion-ring_0.3s_ease-out_forwards]`}></div>
-            <div className={`absolute w-[100%] pt-[100%] rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] ${fireColors} opacity-0 mix-blend-screen animate-[explosion-core_0.3s_ease-out_forwards]`}></div>
-            <div className={`absolute w-[40%] pt-[40%] rounded-full bg-white opacity-0 mix-blend-screen animate-[flash_0.15s_ease-out_forwards]`}></div>
-            {sparks.map((s) => (
+            {!isLow && <div className={`absolute w-full pt-[100%] rounded-full border-white/50 opacity-0 animate-[explosion-ring_0.3s_ease-out_forwards]`}></div>}
+            <div className={`absolute ${isLow ? 'w-[50%] pt-[50%]' : 'w-[100%] pt-[100%]'} rounded-full bg-[radial-gradient(circle,_var(--tw-gradient-stops))] ${fireColors} opacity-0 mix-blend-screen animate-[explosion-core_0.3s_ease-out_forwards]`}></div>
+            <div className={`absolute ${isLow ? 'w-[20%] pt-[20%]' : 'w-[40%] pt-[40%]'} rounded-full bg-white opacity-0 mix-blend-screen animate-[flash_0.15s_ease-out_forwards]`}></div>
+            {!isLow && sparks.map((s) => (
                 <div 
                     key={s.id}
                     className={`absolute rounded-full ${sparkColor} animate-[spark-fly_0.3s_ease-out_forwards]`}

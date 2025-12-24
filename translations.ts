@@ -79,6 +79,7 @@ export const TRANSLATIONS = {
         LANGUAGE: "LANGUAGE",
         PRESS_KEY: "PRESS KEY",
         VIBRATION: "VIBRATION",
+        GRAPHICS_QUALITY: "GRAPHICS QUALITY",
 
         // Pause & End
         PAUSED: "GAME PAUSED",
@@ -191,6 +192,7 @@ export const TRANSLATIONS = {
         LANGUAGE: "ภาษา",
         PRESS_KEY: "กดปุ่ม",
         VIBRATION: "ระบบสั่น",
+        GRAPHICS_QUALITY: "คุณภาพกราฟิก",
 
         // Pause & End
         PAUSED: "เกมหยุดชั่วคราว",

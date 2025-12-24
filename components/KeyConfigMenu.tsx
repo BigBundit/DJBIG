@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { KeyMapping, LaneConfig, AudioSettings, LayoutSettings } from '../types';
 import { LANE_CONFIGS_4, LANE_CONFIGS_5, LANE_CONFIGS_7 } from '../constants';
@@ -232,6 +231,12 @@ export const KeyConfigMenu: React.FC<KeyConfigMenuProps> = ({
                                     label={t.MENU_BG} 
                                     isActive={!!layoutSettings.enableMenuBackground} 
                                     onClick={() => { onPlaySound('select'); onLayoutSettingsChange({...layoutSettings, enableMenuBackground: !layoutSettings.enableMenuBackground}); }} 
+                                />
+                                <CyberToggle 
+                                    label={t.GRAPHICS_QUALITY || "GRAPHICS QUALITY"} 
+                                    isActive={layoutSettings.graphicsQuality === 'high'} 
+                                    onClick={() => { onPlaySound('select'); onLayoutSettingsChange({...layoutSettings, graphicsQuality: layoutSettings.graphicsQuality === 'high' ? 'low' : 'high'}); }}
+                                    subLabels={['LOW', 'HIGH']}
                                 />
                                 <CyberToggle 
                                     label={t.LANGUAGE} 

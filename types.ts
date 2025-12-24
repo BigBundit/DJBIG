@@ -1,5 +1,4 @@
 
-
 export enum GameStatus {
     TITLE,
     MENU,
@@ -98,8 +97,11 @@ export interface LayoutSettings {
     enableMenuBackground?: boolean;
     language: 'en' | 'th';
     enableVibration?: boolean;
+    graphicsQuality: 'low' | 'high';
 }
 
+// --- GAME MODIFIERS ---
+// Define the missing GameModifiers interface used in App.tsx and components/Note.tsx
 export interface GameModifiers {
     mirror: boolean;
     sudden: boolean;
